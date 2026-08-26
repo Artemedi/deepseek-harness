@@ -228,3 +228,9 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Coverage:** The memory service now has regression cases proving an oversized multibyte citation is excluded and a citation at the exact UTF-8 byte limit is retained.
 - **Evidence:** Memory service, invariant, and real Loader composition tests passed `8/8`.
 - **Next action:** Use this byte-boundary evidence as the required conformance baseline for TencentDB and OpenViking adapters when their retrieval APIs are supplied.
+
+## 2026-08-26: UTF-8 memory test push remains unauthorized
+
+- **Push result:** DSH commit `0dfcddc57f` was not publishable through the configured HTTPS remote or available SSH deploy key; both paths lack authorization for the upstream repository.
+- **Published audit:** Harness commit `c6a3c8c` records the result and is synchronized with `origin/main`.
+- **Next action:** Continue local conformance work and publish DSH commits once repository authorization is available.
