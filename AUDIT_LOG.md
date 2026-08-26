@@ -108,6 +108,13 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Limit:** Search currently covers DSH session history only. No automatic prompt injection, store operation, TencentDB provider, OpenViking provider, or provider-failure normalization has been added.
 - **Next action:** Add an opt-in runnable composition/snapshot fixture, then evaluate TencentDB and OpenViking adapters against the same durable search observation rule.
 
+## 2026-08-26: pi-ai structured diagnostics boundary rechecked
+
+- **Finding:** `@earendil-works/pi-ai@0.82.1` exposes `SimpleStreamOptions.onResponse`, but its OpenAI-compatible implementation invokes that callback only after `retryProviderRequest()` returns a successful response.
+- **P0 consequence:** A gateway HTTP 502 is raised inside `retryProviderRequest()` before `onResponse`; adapter code therefore cannot recover `status` or `X-Request-ID` through the public callback. The existing DSH regression still correctly preserves the flattened `Upstream error.` text and maps it to retryable `SERVER`.
+- **Decision:** Do not ship an adapter workaround that claims structured-field preservation without evidence. The next valid implementation requires an upstream pi-ai change that forwards error response metadata, or an adapter-owned fetch/API path with equivalent retry, auth, stream, and replay semantics.
+- **Evidence:** Local Node 22 adapter attempt was reverted after the focused test showed status/request id remained absent; existing adapter/convert/retry coverage remained intact in the prior verified commit.
+
 ## 2026-08-26: DSH P0 fix completed locally
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.
