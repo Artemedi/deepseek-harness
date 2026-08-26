@@ -281,6 +281,8 @@
     { "path": "./packages/experimental/memory" },
     { "path": "./packages/experimental/tool-agent-team" },
     { "path": "./packages/experimental/tool-memory" },
+    { "path": "./packages/experimental/verifier" },
+    { "path": "./packages/experimental/tool-verifier" },
     { "path": "./packages/workflow/workflow" },
     { "path": "./packages/workflow/workflow-worker-thread" },
     { "path": "./packages/workflow/tool-workflow" },

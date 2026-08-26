@@ -496,6 +496,12 @@ importers:
       '@deepseek-ai/dsh-experimental-tool-memory':
         specifier: workspace:*
         version: link:../packages/experimental/tool-memory
+      '@deepseek-ai/dsh-experimental-tool-verifier':
+        specifier: workspace:*
+        version: link:../packages/experimental/tool-verifier
+      '@deepseek-ai/dsh-experimental-verifier':
+        specifier: workspace:*
+        version: link:../packages/experimental/verifier
       '@deepseek-ai/dsh-fs-e2b':
         specifier: workspace:*
         version: link:../packages/e2b/fs-e2b
@@ -4285,6 +4291,44 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
+
+  packages/experimental/tool-verifier:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-experimental-verifier':
+        specifier: workspace:^
+        version: link:../verifier
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+
+  packages/experimental/verifier:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
 
   packages/extensions/cordis-client-runner:
     devDependencies:
