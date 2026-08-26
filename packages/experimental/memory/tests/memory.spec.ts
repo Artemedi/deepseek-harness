@@ -121,9 +121,9 @@ describe('MemoryService', () => {
   it('serves enabled TencentDB and OpenViking stubs without session ids', async () => {
     const { ctx, agent, service } = await setup('/workspace/stub', 'unused', { providers: ['local', 'tencentdb', 'openviking'] })
     await expect(service.search(agent, { provider: 'tencentdb', query: 'retry', signal: new AbortController().signal }))
-      .resolves.toMatchObject({ provider: 'tencentdb', hits: [{ id: 'tencentdb:stub-chat-1', kind: 'memory', source: 'chat-memory' }] })
+      .resolves.toMatchObject({ provider: 'tencentdb', hits: [{ id: 'tencentdb:stub-chat-1', kind: 'memory', source: 'chat-memory', title: 'Gateway retry', content: 'TencentDB stub retry evidence' }] })
     await expect(service.search(agent, { provider: 'openviking', depth: 'L1', query: 'retry', signal: new AbortController().signal }))
-      .resolves.toMatchObject({ provider: 'openviking', hits: [{ id: 'openviking:viking://stub/retry', title: 'Retry detail' }] })
+      .resolves.toMatchObject({ provider: 'openviking', hits: [{ id: 'openviking:viking://loader/retry', title: 'Loader retry detail', content: 'OpenViking Loader stub retry detail' }, { id: 'openviking:viking://stub/retry', title: 'Retry detail', content: 'OpenViking stub retry detail' }] })
     await ctx.fiber.dispose()
   })
 

@@ -44,6 +44,8 @@ export interface TencentDbRecord {
 /** Deterministic local TencentDB stub record. */
 export const TENCENTDB_STUB_RECORDS: readonly TencentDbRecord[] = [{
   id: 'stub-chat-1', kind: 'memory', title: 'Gateway retry', content: 'TencentDB stub retry evidence', source: 'chat-memory', workspace: '/workspace/stub',
+}, {
+  id: 'stub-chat-a', kind: 'memory', title: 'Loader retry', content: 'TencentDB Loader stub retry evidence', source: 'chat-memory', workspace: '/workspace/a',
 }]
 
 /** Minimal OpenViking record accepted by the local stub adapter. */
@@ -57,6 +59,8 @@ export interface OpenVikingRecord {
 /** Deterministic local OpenViking stub records. */
 export const OPENVIKING_STUB_RECORDS: readonly OpenVikingRecord[] = [{
   uri: 'viking://stub/retry', title: 'Retry summary', content: 'OpenViking stub retry evidence', depth: 'L0',
+}, {
+  uri: 'viking://loader/retry', title: 'Loader retry detail', content: 'OpenViking Loader stub retry detail', depth: 'L1',
 }, {
   uri: 'viking://stub/retry', title: 'Retry detail', content: 'OpenViking stub retry detail', depth: 'L1',
 }]

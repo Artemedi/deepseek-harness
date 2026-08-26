@@ -71,6 +71,7 @@ async function boot(): Promise<Context> {
     "- name: '@deepseek-ai/dsh-system-prompt'",
     "- name: 'test-query'",
     "- name: '@deepseek-ai/dsh-experimental-memory'",
+    "  config: { providers: ['local', 'tencentdb', 'openviking'] }",
     "- name: '@deepseek-ai/dsh-tools'",
     "- name: '@deepseek-ai/dsh-experimental-tool-memory'",
     '',
@@ -126,5 +127,14 @@ describe('experimental memory real Loader composition', () => {
         id: 'local:prior:4', sessionId: 'prior', seq: 4, eventType: 'user/message', content: 'gateway retry guidance',
       }],
     })
+
+    const tencent = await ctx.tools.execute({ signal: new AbortController().signal, callId: CallId('memory-tencent'), name: 'memory_search', arguments: { provider: 'tencentdb', query: 'retry' }, agent: owner })
+    expect(tencent.isError).toBe(false)
+    expect(tencent.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('tencentdb:stub-chat-a') })
+
+    const viking = await ctx.tools.execute({ signal: new AbortController().signal, callId: CallId('memory-viking'), name: 'memory_search', arguments: { provider: 'openviking', depth: 'L1', query: 'retry' }, agent: owner })
+    expect(viking.isError).toBe(false)
+    expect(viking.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('openviking:viking://stub/retry') })
+    expect(owner.session.events.filter(event => event.type === 'memory/search')).toHaveLength(3)
   }, 30_000)
 })
