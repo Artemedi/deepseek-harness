@@ -280,6 +280,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** Remote contract, memory service, invariant, and Loader composition tests passed `12/12`; package TypeScript check passed inside Node 22.
 - **Next action:** Implement typed remote status/failure normalizers and test them locally before mounting any provider.
 
+## 2026-08-27: Stub remote failure normalization
+
+- **DSH commit:** `e84eaec8ce` (`feat: normalize remote memory failures`).
+- **Change:** The local remote contract now maps HTTP 401/403 to `MEMORY_UNAUTHORIZED`, 408/429/599 to `MEMORY_RETRYABLE`, 5xx to `MEMORY_PROVIDER_UNAVAILABLE`, and other statuses to `MEMORY_PROVIDER_ERROR`.
+- **Security:** Error messages include only provider id and status; remote response bodies are not retained or exposed.
+- **Evidence:** Remote contract, memory service, invariant, and Loader composition tests passed `13/13`; the experimental memory package TypeScript check passed inside Node 22.
+- **Completion scope:** The local stub-backed adapter seam is complete. Live provider transport, credentials, and mounting remain intentionally outside this objective.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
