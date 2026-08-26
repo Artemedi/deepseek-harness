@@ -251,6 +251,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Documentation:** TencentDB probe README now documents transport classification and diagnostic header lookup.
 - **Next action:** Use the probe fixture against the real pinned TencentDB proxy after credentials are supplied, without recording secrets or raw provider bodies.
 
+## 2026-08-26: Gateway probe wire-path regression
+
+- **Change:** Added a subprocess regression that starts the local gateway stub, invokes the real probe CLI, and verifies health JSON, HTTP 502 classification, and `X-Request-ID` extraction.
+- **Redaction:** The assertion confirms the probe output contains neither the Authorization header nor the upstream error body.
+- **Evidence:** Probe, local-memory, and Ruflo integration tests passed `15/15`; Python compilation passed.
+- **Scope:** This proves the Harness probe and stub wire path only. It does not claim that the current pi-ai public API preserves failed-response headers or request ids.
+- **Next action:** Run the same probe against the digest-pinned TencentDB deployment when credentials are available.
+
 ## 2026-08-26: Local memory malformed-record failures
 
 - **Change:** The provider-neutral JSONL reference provider now converts malformed JSON and structurally incomplete persisted records into explicit `MemoryError` failures.

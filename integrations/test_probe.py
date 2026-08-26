@@ -1,10 +1,15 @@
 import importlib.util
+import json
+import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 
 
-MODULE_PATH = Path(__file__).parent / "tencentdb-agent-memory" / "probe.py"
+INTEGRATION_ROOT = Path(__file__).parent / "tencentdb-agent-memory"
+MODULE_PATH = INTEGRATION_ROOT / "probe.py"
+STUB_PATH = INTEGRATION_ROOT / "stub_gateway.py"
 SPEC = importlib.util.spec_from_file_location("tdai_probe", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -37,6 +42,36 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(response.status, 0)
         self.assertNotEqual(response.body, "")
         self.assertEqual(response.headers, {})
+
+    def test_real_stub_wire_path_preserves_gateway_diagnostics(self) -> None:
+        port = 19096
+        process = subprocess.Popen(
+            [sys.executable, str(STUB_PATH), "--port", str(port)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            for _ in range(20):
+                health = MODULE.request(f"http://127.0.0.1:{port}/health")
+                if health.status == 200:
+                    break
+                time.sleep(0.05)
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--base-url", f"http://127.0.0.1:{port}/dsh/default", "--model", "stub", "--check-chat"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 1)
+            self.assertEqual(completed.stderr, "")
+            output = [json.loads(line) for line in completed.stdout.splitlines()]
+            self.assertEqual(output[0], {"check": "health", "status": 200, "classification": "other-json-response"})
+            self.assertEqual(output[1], {"check": "chat-completions", "status": 502, "classification": "gateway-upstream-error", "request_id": "stub-request-0001"})
+            self.assertNotIn("Authorization", completed.stdout)
+            self.assertNotIn("Upstream error.", completed.stdout)
+        finally:
+            process.terminate()
+            process.wait(timeout=5)
 
 
 if __name__ == "__main__":
