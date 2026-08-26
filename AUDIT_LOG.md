@@ -234,3 +234,11 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Push result:** DSH commit `0dfcddc57f` was not publishable through the configured HTTPS remote or available SSH deploy key; both paths lack authorization for the upstream repository.
 - **Published audit:** Harness commit `c6a3c8c` records the result and is synchronized with `origin/main`.
 - **Next action:** Continue local conformance work and publish DSH commits once repository authorization is available.
+
+## 2026-08-26: Local memory malformed-record failures
+
+- **Change:** The provider-neutral JSONL reference provider now converts malformed JSON and structurally incomplete persisted records into explicit `MemoryError` failures.
+- **Reason:** Corrupted provider data must not become an empty successful search or leak an implementation-specific parser exception. This is the failure behavior required before remote TencentDB/OpenViking adapters are mounted.
+- **Evidence:** Harness local-memory and Ruflo tests passed `11/11`; runner syntax and Python bytecode checks passed.
+- **Documentation:** Updated `README.md` with the reference-provider corruption rule.
+- **Next action:** Reuse this explicit-failure expectation in stub conformance tests when external retrieval APIs are available.

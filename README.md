@@ -38,6 +38,7 @@ The DSH route template is [`integrations/tencentdb-agent-memory/dsh-settings.yam
 - Never commit API keys, SSH private keys, `.env` files, database volumes, raw conversation logs, or unredacted provider responses.
 - Keep external services replaceable and DSH session history authoritative.
 - Record failed probes and infrastructure blockers in [`AUDIT_LOG.md`](AUDIT_LOG.md), including the exact command and result.
+- Reference providers fail explicitly on malformed persisted records; they must not turn corruption into an empty search result.
 - Run the smallest relevant validation before each commit.
 
 ## Upstream References

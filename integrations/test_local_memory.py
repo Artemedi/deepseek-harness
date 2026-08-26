@@ -48,6 +48,16 @@ class LocalMemoryTests(unittest.TestCase):
 
         self.assertEqual(len(self.memory.search(self.workspace, query="gateway", limit=1)), 1)
 
+    def test_rejects_malformed_persisted_record(self) -> None:
+        self.memory.path.write_text('{"workspace":"/workspace/a"}\n', encoding="utf-8")
+        with self.assertRaisesRegex(MODULE.MemoryError, "malformed record"):
+            self.memory.search(self.workspace, query="gateway")
+
+    def test_rejects_malformed_json(self) -> None:
+        self.memory.path.write_text("not-json\n", encoding="utf-8")
+        with self.assertRaisesRegex(MODULE.MemoryError, "malformed JSON"):
+            self.memory.search(self.workspace, query="gateway")
+
 
 if __name__ == "__main__":
     unittest.main()

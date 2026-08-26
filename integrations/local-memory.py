@@ -78,15 +78,21 @@ class LocalMemory:
         for line in self.path.read_text(encoding="utf-8").splitlines():
             if not line:
                 continue
-            record: dict[str, Any] = json.loads(line)
+            try:
+                record: dict[str, Any] = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError) as error:
+                raise MemoryError("memory store contains malformed JSON") from error
+            required = ("id", "workspace", "kind", "title", "content", "source")
+            if any(key not in record or not isinstance(record[key], str) for key in required):
+                raise MemoryError("memory store contains a malformed record")
             if record["workspace"] != scope.workspace:
                 continue
             haystack = f'{record["title"]}\n{record["content"]}'.casefold()
             if needle not in haystack:
                 continue
             hits.append(MemoryHit(
-                id=str(record["id"]), kind=str(record["kind"]), title=str(record["title"]),
-                content=str(record["content"]), source=str(record["source"]), score=1.0,
+                id=record["id"], kind=record["kind"], title=record["title"],
+                content=record["content"], source=record["source"], score=1.0,
             ))
             if len(hits) == limit:
                 break
