@@ -243,6 +243,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Documentation:** Updated the TencentDB setup README with the immutable-image requirement.
 - **Next action:** Pin and review any future upstream image update as an explicit audit entry before changing `.env.example`.
 
+## 2026-08-26: Gateway probe failure conformance
+
+- **Change:** Added keyless probe tests covering upstream API errors, structured errors, malformed/non-object JSON, case-insensitive request/correlation headers, and unreachable transport results.
+- **Behavior:** An unreachable endpoint remains an explicit `status: 0` result with diagnostic text and no headers; it is not reported as a healthy empty response.
+- **Evidence:** Probe, local-memory, and Ruflo integration tests passed `14/14`; Python compilation passed.
+- **Documentation:** TencentDB probe README now documents transport classification and diagnostic header lookup.
+- **Next action:** Use the probe fixture against the real pinned TencentDB proxy after credentials are supplied, without recording secrets or raw provider bodies.
+
 ## 2026-08-26: Local memory malformed-record failures
 
 - **Change:** The provider-neutral JSONL reference provider now converts malformed JSON and structurally incomplete persisted records into explicit `MemoryError` failures.

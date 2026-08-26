@@ -35,7 +35,7 @@ python3 stub_gateway.py
 TDAI_PROXY_BASE_URL=http://127.0.0.1:18096/dsh/default TDAI_PROXY_MODEL=stub python3 probe.py --check-chat
 ```
 
-The expected classification is `gateway-upstream-error`, with the stub request id shown separately. The stub never forwards content to a provider.
+The expected classification is `gateway-upstream-error`, with the stub request id shown separately. The probe also treats an unreachable endpoint as an explicit transport result (`status: 0`) and reads request or correlation ids case-insensitively. The stub never forwards content to a provider.
 
 ## DSH Route
 
