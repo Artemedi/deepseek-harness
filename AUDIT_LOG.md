@@ -242,6 +242,13 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Documentation:** TencentDB README now states the exact immutable digest requirement.
 - **Next action:** Treat any digest change as a reviewed deployment update and rerun the complete probe against supplied credentials.
 
+## 2026-08-26: Final round evidence and external blockers
+
+- **Evidence:** Harness digest runner passed; probe, local-memory, and Ruflo tests passed `15/15`. Harness is clean and synchronized with `origin/main` at `806d14f`.
+- **DSH evidence:** Local commits cover P0 retry classification, flattened HTTP status preservation, experimental memory search authorization/durability/cancellation/UTF-8 bounds, and assembled coordinator-worker-review replay. The DSH worktree retains only pre-existing unrelated files plus local integration commits.
+- **Unresolved external conditions:** TencentDB/OpenViking retrieval API contracts and credentials were not supplied; no live provider adapter or live deployment claim is made. The current public pi-ai path still does not expose failed-response request id/headers. The available DSH deploy key cannot publish to `deepseek-ai/deepseek-harness.git`, and HTTPS has no credential.
+- **Next action:** Resume implementation when provider contracts/credentials or an authorized DSH upstream credential are available; do not force-push, vendor OpenViking, or enable hidden proxy injection.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
