@@ -23,7 +23,14 @@ class WorkflowSnapshotAdapter extends LlmAdapter {
       return
     }
 
-    const lastUserText = options.messages.at(-1)?.content
+    const lastMessage = options.messages.at(-1)
+    const lastUserText = lastMessage?.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('') ?? ''
+    const lastToolText = lastMessage?.content
+      .filter(block => block.type === 'tool-result')
+      .flatMap(block => block.content)
       .filter(block => block.type === 'text')
       .map(block => block.text)
       .join('') ?? ''
@@ -31,7 +38,7 @@ class WorkflowSnapshotAdapter extends LlmAdapter {
       ? 'worker evidence: retry path is covered'
       : request === 2
         ? 'review approved: evidence is sufficient'
-        : `Coordinator result received: ${lastUserText}`
+        : `Coordinator result received: ${lastUserText}${lastToolText}`
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text: reply }
     yield { type: 'block-end', index: 0, block: { type: 'text', text: reply } }
