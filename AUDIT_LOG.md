@@ -221,3 +221,10 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Push result:** DSH commit `afe0a966a2` could not be published through HTTPS (no credential) or the available SSH deploy key (unauthorized for `deepseek-ai/deepseek-harness.git`).
 - **Published audit:** Harness commit `f72f17f` records this result and is synchronized with `origin/main`.
 - **Next action:** Obtain DSH contributor authorization before publishing local commits; continue only with locally verifiable seams and no remote-provider claims.
+
+## 2026-08-26: UTF-8 byte-boundary coverage for memory citations
+
+- **DSH commit:** `0dfcddc57f` (`test: cover UTF-8 memory byte limits`).
+- **Coverage:** The memory service now has regression cases proving an oversized multibyte citation is excluded and a citation at the exact UTF-8 byte limit is retained.
+- **Evidence:** Memory service, invariant, and real Loader composition tests passed `8/8`.
+- **Next action:** Use this byte-boundary evidence as the required conformance baseline for TencentDB and OpenViking adapters when their retrieval APIs are supplied.
