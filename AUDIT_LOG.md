@@ -85,3 +85,11 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** In isolated Node 22 workspaces, `packages/llm/llm-pi-ai/tests/convert.spec.ts` passed 72/72 tests and `packages/llm/llm-retry/tests/transport-recovery.spec.ts` passed 7/7 tests. The latter confirms the existing bounded retry lifecycle consumes the resulting `SERVER` failure.
 - **Environment limitation:** DSH pre-commit hooks requiring `node` could not run on the host, so the commit used `LEFTHOOK=0` after staged whitespace validation. The Node 22 focused test is the recorded behavior evidence.
 - **Next action:** Add the assembled retry/Web regression and preserve status/request-id facts at the adapter boundary where the upstream library still permits it.
+
+## 2026-08-26: Exact pi-ai HTTP gateway boundary regression
+
+- **Fixture:** The existing `llm-pi-ai` local OpenAI-compatible mock served HTTP 502 with `{"error":{"type":"api_error","message":"Upstream error."}}` and `X-Request-ID`.
+- **Result:** The real pi-ai adapter preserved `Upstream error.` inside its error message and the DSH stream conversion classified it as `SERVER`.
+- **Evidence:** In an isolated Node 22 workspace, `pnpm exec vitest run packages/llm/llm-pi-ai/tests/adapter.spec.ts packages/llm/llm-pi-ai/tests/convert.spec.ts` passed 120/120 tests.
+- **Limit:** pi-ai retains the 502 prefix in message text but does not expose the HTTP status or request id as structured `LlmFailure` facts. Retry now works; observability remains unfinished.
+- **Next action:** Add agent-loop/Web assembled retry coverage, then instrument the adapter or upstream SDK where structured response facts can be captured.
