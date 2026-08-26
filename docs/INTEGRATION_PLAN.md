@@ -24,7 +24,7 @@ Implement TencentDB and OpenViking adapters behind `ctx.memory`. Map TencentDB C
 
 ## Phase 4: Ruflo patterns
 
-Use existing DSH `ctx.subagents`, `ctx.agentTeams`, `ctx.workflowEngine`, and `ctx.jobs`. Adopt declarative roles, task DAG dependencies, coordinator reports, bounded fan-out, budgets, retries, and review stages. Do not embed Ruflo's scheduler, hook runtime, or competing persistence.
+Use existing DSH `ctx.subagents`, `ctx.agentTeams`, `ctx.workflowEngine`, and `ctx.jobs`. Adopt declarative roles, task DAG dependencies, coordinator reports, bounded fan-out, budgets, retries, and review stages. Validate the plan with [`integrations/ruflo-dsh-plan.py`](../integrations/ruflo-dsh-plan.py) before handing work to DSH; the validator does not execute tasks or own state. Do not embed Ruflo's scheduler, hook runtime, or competing persistence.
 
 ## Exit Criteria
 

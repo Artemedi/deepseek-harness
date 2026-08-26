@@ -123,6 +123,13 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** Local provider unittest passes 4/4. TencentDB `validate` fails closed without `.env` and prints no credentials. No TencentDB credentials were available, so the container stack and live provider behavior were not claimed.
 - **Next action:** Implement stub-backed TencentDB/OpenViking adapters only after their retrieval APIs and credential profiles are supplied; retain direct DSH routing as rollback.
 
+## 2026-08-26: Ruflo-to-DSH bounded orchestration preflight
+
+- **Artifact:** Added `integrations/ruflo-dsh-plan.py` and a deterministic example plan. It validates a declarative task DAG before work reaches DSH, enforcing explicit task cost, max task count, dependency fan-out, cycle freedom, budget, and exactly one review stage.
+- **Ownership:** The validator is not a scheduler and does not execute tasks, start agents, store reports, or authorize operations. Real execution remains with DSH `ctx.workflowEngine`, `ctx.subagents`, `ctx.agentTeams`, and `ctx.jobs`, preserving their session ownership, lifecycle, cancellation, and persistence rules.
+- **Evidence:** New plan tests plus existing local-memory tests pass 8/8; the example CLI prints a valid bounded limits report; TencentDB runner syntax remains valid.
+- **Next action:** Use the validator as preflight for a keyless DSH workflow fixture with an explicit coordinator and review consumer; do not add a second Ruflo runtime.
+
 ## 2026-08-26: DSH P0 fix completed locally
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.

@@ -1,0 +1,9 @@
+{
+  "limits": {"maxFanOut": 3, "maxTasks": 8, "budget": 12},
+  "tasks": [
+    {"id": "research-a", "role": "worker", "cost": 3},
+    {"id": "research-b", "role": "worker", "cost": 3},
+    {"id": "coordinate", "role": "coordinator", "dependsOn": ["research-a", "research-b"], "cost": 2},
+    {"id": "review", "role": "review", "dependsOn": ["coordinate"], "cost": 2}
+  ]
+}
