@@ -272,6 +272,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** Remote contract plus existing memory invariant/service/Loader tests passed `12/12`; the experimental memory package TypeScript check passed inside Node 22.
 - **Next action:** Add adapter-owned typed failure normalization and a composed test only after deciding the durable event fields for remote citations.
 
+## 2026-08-27: Remote memory contract exported locally
+
+- **DSH commit:** `2663f7096d` (`api: export remote memory contract`).
+- **Change:** Exported the pure TencentDB/OpenViking response normalizers and their request/record types from the experimental memory package root, so future local adapter plugins can depend on the package API rather than internal source paths.
+- **Safety:** The contract remains unmounted, network-free, credential-free, and separate from the local `memory/search` durable event until remote fields and typed failures are finalized.
+- **Evidence:** Remote contract, memory service, invariant, and Loader composition tests passed `12/12`; package TypeScript check passed inside Node 22.
+- **Next action:** Implement typed remote status/failure normalizers and test them locally before mounting any provider.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
