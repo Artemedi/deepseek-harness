@@ -201,3 +201,9 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Security and honesty:** No request id, response headers, or raw body is synthesized; a bare `Upstream error.` still has no status because the public pi-ai callback does not expose the failed response.
 - **Evidence:** Node 22 `convert.spec.ts` and `transport-recovery.spec.ts` passed `79/79`.
 - **Next action:** Find an upstream-compatible failed-response hook or adapter-owned transport path before claiming complete gateway diagnostics preservation.
+
+## 2026-08-26: pi-ai status fix remains local
+
+- **Push result:** DSH commit `2715bc03c2` could not be pushed: HTTPS has no available GitHub credential and the available SSH deploy key is unauthorized for the upstream DSH repository.
+- **Published audit:** This limitation is recorded in Harness commit `b4267af` and pushed to `origin/main`.
+- **Next action:** Obtain DSH repository authorization or an upstream pi-ai failed-response hook; do not force-push or alter remotes.
