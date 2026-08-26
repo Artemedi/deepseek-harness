@@ -264,6 +264,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Documentation:** The local package README now describes the provider-neutral delegation and continues to mark public TencentDB/OpenViking links as read-only design inputs.
 - **Next action:** Add local stub adapters with explicit response validation and failure mapping before considering any live provider configuration.
 
+## 2026-08-27: Stub remote memory response contracts
+
+- **DSH commit:** `582739c464` (`feat: add stub remote memory contracts`).
+- **Scope:** Added pure local normalizers for TencentDB-shaped records and OpenViking records with explicit `L0`/`L1`/`L2` selection, opaque ids, workspace filtering, UTF-8 byte bounds, empty-content filtering, and cancellation.
+- **Safety:** The normalizers make no network calls, accept no credentials, are not mounted by `MemoryService`, and do not alter DSH durable events or authorization.
+- **Evidence:** Remote contract plus existing memory invariant/service/Loader tests passed `12/12`; the experimental memory package TypeScript check passed inside Node 22.
+- **Next action:** Add adapter-owned typed failure normalization and a composed test only after deciding the durable event fields for remote citations.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
