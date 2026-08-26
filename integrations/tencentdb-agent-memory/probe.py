@@ -44,11 +44,13 @@ def classify(body: str) -> str:
     if not isinstance(parsed, dict):
         return "json-non-object"
     error = parsed.get("error")
-    if isinstance(error, dict) and error.get("type") == "api_error" and error.get("message") == "Upstream error.":
+    if not isinstance(error, dict):
+        return "other-json-response"
+    if error.get("type") == "api_error" and error.get("message") == "Upstream error.":
         return "gateway-upstream-error"
-    if isinstance(error, dict):
-        return "structured-error"
-    return "other-json-response"
+    if error.get("type") == "api_error":
+        return "gateway-api-error"
+    return "structured-error"
 
 
 def main() -> int:

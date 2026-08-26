@@ -46,3 +46,11 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Pinned images:** `memory-core@sha256:9798254a8cc06276b7c5b3c19df49f136fae25d579564e1f01f9c4b9b8cd2d11`, `memory-hub@sha256:39548fd616f6f211ad2288e33fe5e93870b705cffe0468047520cd786408e657`, and `memory-proxy@sha256:c8de30142787a5df7937c02c167f2ee37f00505b79036357653a6ce78a29fba5`.
 - **Reason:** Avoid silently changing the integration runtime when upstream `latest` tags move.
 - **Next action:** Review the pinned upstream release and run the stack only with local credentials supplied outside Git.
+
+## 2026-08-26: Repeated gateway failure with pi-ai classification
+
+- **Symptom:** `This turn failed` with `{"type":"api_error","message":"Upstream error."}` and DSH code `PI_AI_ERROR`.
+- **Interpretation:** The failure arrived through the pi-ai in-stream error path. The generic gateway message contains no provider status, request id, or retryability, so DSH cannot make a reliable recovery decision from it.
+- **Decision:** Keep this incident in the P0 gateway reliability track. Do not treat `PI_AI_ERROR` as evidence that TencentDB memory or OpenViking context is functioning.
+- **Required follow-up:** Capture the gateway response status, headers, and redacted body at the provider boundary; preserve them in `LlmFailure`; classify transient upstream failures separately from unknown pi-ai errors; add a keyless assembled regression.
+- **Next action:** Reproduce with a local stub that emits the minimal gateway `api_error` envelope, then trace it through `llm-pi-ai`, session finish events, API transport, and Web UI.
