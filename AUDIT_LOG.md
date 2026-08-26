@@ -92,6 +92,13 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Limit:** The reference provider is not mounted in DSH and never injects prompt context. It is an executable provider conformance baseline; the DSH plugin must derive scope from `Agent.session.header.cwd` and append durable `memory/search` events.
 - **Next action:** Create the experimental DSH memory service/package skeleton and use these tests as provider-conformance fixtures.
 
+## 2026-08-26: DSH experimental package boundary selected
+
+- **Decision:** The first mounted implementation will be an opt-in experimental pair, `experimental/memory` plus `experimental/tool-memory`. It will not appear in the default base bundle because release bundles may not depend on experimental packages.
+- **Local provider:** The initial provider delegates workspace-authorized search to existing `ctx.sessionQuery`; it uses the calling Agent's `session.header.cwd` as scope and never accepts workspace ids from model arguments.
+- **Durability:** `memory_search` must append a bounded `memory/search` event containing the exact cited text before a later model request can use it.
+- **Next action:** Add package manifests, aggregate references, service types, invariant, local provider, explicit tool consumer, and a composed keyless test in one implementation slice.
+
 ## 2026-08-26: DSH P0 fix completed locally
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.
