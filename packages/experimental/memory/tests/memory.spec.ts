@@ -60,7 +60,7 @@ function agentFor(ctx: Context, session: Session): { agent: Agent; dispose: () =
   return { agent, dispose: ctx.agents.register(agent) }
 }
 
-async function setup(cwd?: string): Promise<{ ctx: Context; agent: Agent; service: MemoryService; disposeAgent: () => void }> {
+async function setup(cwd?: string, documentText = 'gateway retry evidence'): Promise<{ ctx: Context; agent: Agent; service: MemoryService; disposeAgent: () => void }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
@@ -76,7 +76,7 @@ async function setup(cwd?: string): Promise<{ ctx: Context; agent: Agent; servic
         type: 'user/message',
         time: 1,
         surface: 'current',
-        text: 'gateway retry evidence',
+        text: documentText,
       }])
     }
   })
@@ -125,5 +125,21 @@ describe('MemoryService', () => {
     await expect(service.search(agent, { query: 'x', signal: controller.signal }))
       .rejects.toThrow('cancelled')
     await ctx.fiber.dispose()
+  })
+
+  it('enforces the aggregate citation cap in UTF-8 bytes', async () => {
+    const text = 'retry восстановлен'
+    const bytes = Buffer.byteLength(text, 'utf8')
+    const bounded = await setup('/workspace/a', text)
+    await expect(bounded.service.search(bounded.agent, {
+      query: 'retry', maxContentBytes: bytes - 1, signal: new AbortController().signal,
+    })).resolves.toMatchObject({ hits: [] })
+    await bounded.ctx.fiber.dispose()
+
+    const exact = await setup('/workspace/a', text)
+    await expect(exact.service.search(exact.agent, {
+      query: 'retry', maxContentBytes: bytes, signal: new AbortController().signal,
+    })).resolves.toMatchObject({ hits: [{ content: text }] })
+    await exact.ctx.fiber.dispose()
   })
 })
