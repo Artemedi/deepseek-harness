@@ -193,3 +193,11 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Push result:** HTTPS has no non-interactive credentials; the configured SSH deploy key is unauthorized for `deepseek-ai/deepseek-harness.git`.
 - **Evidence:** The commit is present locally and the updated refresh/replay evidence is `1/1` each.
 - **Next action:** Publish the two local DSH workflow commits after authorization; continue with external adapter contracts and structured pi-ai diagnostics investigation.
+
+## 2026-08-26: Preserve pi-ai HTTP status when flattened text includes it
+
+- **DSH commit:** `2715bc03c2` (`fix: preserve pi-ai HTTP status when available`).
+- **Behavior:** The pi-ai stream converter extracts an HTTP status only when pi-ai already included a recognizable status in the flattened error text, such as `502: ...`, `HTTP 500: ...`, or `API error (429): ...`. The existing stable code classification remains unchanged.
+- **Security and honesty:** No request id, response headers, or raw body is synthesized; a bare `Upstream error.` still has no status because the public pi-ai callback does not expose the failed response.
+- **Evidence:** Node 22 `convert.spec.ts` and `transport-recovery.spec.ts` passed `79/79`.
+- **Next action:** Find an upstream-compatible failed-response hook or adapter-owned transport path before claiming complete gateway diagnostics preservation.
