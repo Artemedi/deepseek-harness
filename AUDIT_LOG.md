@@ -158,3 +158,10 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Observed path:** HTTP 502 with `{"error":{"type":"api_error","message":"Upstream error."}}` reaches the pi-ai adapter, retains `Upstream error.` in the failure message, maps to `SERVER`, and is eligible for the existing bounded retry policy.
 - **Remaining gap:** The adapter does not yet expose HTTP status or `X-Request-ID` as structured `LlmFailure` fields because pi-ai flattens the upstream response before DSH receives it.
 - **Next action:** Add assembled agent-loop/Web evidence and investigate a capture hook at the pi-ai HTTP provider boundary.
+
+## 2026-08-26: DSH push authorization boundary
+
+- **Attempt:** Pushed the three local DSH integration commits through the configured HTTPS remote, then retried with the available Harness SSH identity.
+- **Result:** HTTPS has no non-interactive GitHub credentials; SSH was rejected because the deploy key has no permission to `deepseek-ai/deepseek-harness.git`.
+- **Decision:** Keep the DSH commits local and do not alter remotes, rewrite history, or force-push. Harness remains pushed and synchronized.
+- **Next action:** Continue keyless DSH workflow integration locally; obtain an authorized DSH contributor credential before publishing the existing commits.
