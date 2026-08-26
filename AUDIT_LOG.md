@@ -256,6 +256,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Local result:** The experimental memory README now links the sources and states that they are not runtime dependencies or credential/network paths. The current local provider remains session-history-only until stub-backed adapters are implemented.
 - **Next action:** Implement TencentDB/OpenViking adapters locally against explicit stub contracts derived from these references, preserving DSH durable observations and authorization.
 
+## 2026-08-27: Provider-neutral local memory seam
+
+- **DSH change:** The experimental memory service now delegates validated, Agent-scoped searches through a provider-neutral `MemoryProvider` interface. The shipped provider is an internal local session-query implementation; no remote provider is mounted.
+- **Ownership:** DSH retains live-Agent validation, canonical workspace derivation, bounds, cancellation, durable `memory/search`, and replay authority. A future TencentDB or OpenViking adapter receives only the derived provider request and returns bounded citations.
+- **Evidence:** Memory service, invariant, and Loader composition tests passed `8/8`; the experimental memory package TypeScript check passed.
+- **Documentation:** The local package README now describes the provider-neutral delegation and continues to mark public TencentDB/OpenViking links as read-only design inputs.
+- **Next action:** Add local stub adapters with explicit response validation and failure mapping before considering any live provider configuration.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
