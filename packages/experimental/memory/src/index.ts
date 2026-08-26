@@ -7,8 +7,8 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
-import type { SessionRecord } from '@deepseek-ai/dsh-session-query'
-import type { MemoryId, MemorySearchRequest, MemorySearchResult } from './types.ts'
+import type SessionQueryEngine from '@deepseek-ai/dsh-session-query'
+import type { MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult } from './types.ts'
 
 function MemoryId(id: string): MemoryId {
   return id as MemoryId
@@ -20,6 +20,33 @@ export type * from './types.ts'
 export const MAX_MEMORY_HITS = 20
 /** Maximum bytes the local provider may return in one request. */
 export const MAX_MEMORY_CONTENT_BYTES = 32_768
+
+/** Provider backed by DSH's existing workspace-authorized session-query corpus. */
+class LocalSessionMemoryProvider implements MemoryProvider {
+  readonly id = 'local-session-query'
+
+  constructor(private readonly query: Pick<SessionQueryEngine, 'filterSessions' | 'filterEvents'>) {}
+
+  async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
+    const records = await this.query.filterSessions([{ kind: 'cwd', values: [request.workspace] }], request.signal)
+    const hits: MemorySearchResult['hits'][number][] = []
+    let remaining = request.maxContentBytes
+    for (const record of records) {
+      if (request.signal.aborted) throw request.signal.reason
+      const documents = await this.query.filterEvents(record.header.id, [{ kind: 'text', text: request.query }])
+      for (const document of documents) {
+        const content = document.text.trim()
+        if (content.length === 0) continue
+        const bytes = Buffer.byteLength(content, 'utf8')
+        if (bytes > remaining) continue
+        hits.push({ id: MemoryId(`local:${document.sessionId}:${document.seq}`), sessionId: document.sessionId, seq: document.seq, eventType: document.type, content })
+        remaining -= bytes
+        if (hits.length === request.limit || remaining === 0) return hits
+      }
+    }
+    return hits
+  }
+}
 
 /** Memory retrieval configuration. */
 export interface Config {
@@ -46,6 +73,7 @@ export default class MemoryService extends Service {
   static inject = ['agents', 'sessionQuery']
 
   private readonly config: Required<Config>
+  private readonly provider: MemoryProvider
 
   /** @param ctx - owning Cordis context. @param config - retrieval caps. */
   constructor(ctx: Context, config: Config = {}) {
@@ -54,6 +82,7 @@ export default class MemoryService extends Service {
       defaultLimit: config.defaultLimit ?? 5,
       defaultMaxContentBytes: config.defaultMaxContentBytes ?? 8_192,
     }
+    this.provider = new LocalSessionMemoryProvider(ctx.sessionQuery)
   }
 
   /**
@@ -82,39 +111,7 @@ export default class MemoryService extends Service {
     }
     if (request.signal.aborted) throw request.signal.reason
 
-    const records = await this.ctx.sessionQuery.filterSessions([{ kind: 'cwd', values: [workspace] }], request.signal)
-    const hits = await this.collect(records, query, limit, maxContentBytes, request.signal)
-    return { provider: 'local-session-query', workspace, hits }
-  }
-
-  private async collect(
-    records: readonly SessionRecord[],
-    query: string,
-    limit: number,
-    maxContentBytes: number,
-    signal: AbortSignal,
-  ): Promise<MemorySearchResult['hits']> {
-    const hits: MemorySearchResult['hits'][number][] = []
-    let remaining = maxContentBytes
-    for (const record of records) {
-      if (signal.aborted) throw signal.reason
-      const documents = await this.ctx.sessionQuery.filterEvents(record.header.id, [{ kind: 'text', text: query }])
-      for (const document of documents) {
-        const content = document.text.trim()
-        if (content.length === 0) continue
-        const bytes = Buffer.byteLength(content, 'utf8')
-        if (bytes > remaining) continue
-        hits.push({
-          id: MemoryId(`local:${document.sessionId}:${document.seq}`),
-          sessionId: document.sessionId,
-          seq: document.seq,
-          eventType: document.type,
-          content,
-        })
-        remaining -= bytes
-        if (hits.length === limit || remaining === 0) return hits
-      }
-    }
-    return hits
+    const hits = await this.provider.search({ workspace, query, limit, maxContentBytes, signal: request.signal })
+    return { provider: this.provider.id, workspace, hits }
   }
 }

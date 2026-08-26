@@ -32,11 +32,33 @@ export interface MemorySearchRequest {
   readonly signal: AbortSignal
 }
 
+/** Provider request after DSH has derived and authorized the workspace scope. */
+export interface MemoryProviderSearchRequest {
+  /** Canonical workspace derived from the live Agent session. */
+  readonly workspace: string
+  /** Literal query selected by the explicit consumer. */
+  readonly query: string
+  /** Validated result count bound. */
+  readonly limit: number
+  /** Validated aggregate UTF-8 byte bound. */
+  readonly maxContentBytes: number
+  /** Cancellation owned by the calling operation. */
+  readonly signal: AbortSignal
+}
+
+/** Provider-neutral retrieval implementation used behind `ctx.memory`. */
+export interface MemoryProvider {
+  /** Stable provider id recorded in the durable search observation. */
+  readonly id: string
+  /** Retrieve bounded citations without changing DSH authorization or persistence. */
+  search(request: MemoryProviderSearchRequest): Promise<readonly MemoryHit[]>
+}
+
 /** Detached result of one explicit memory search. */
 /** Durable exact observation appended before citations reach a later model request. */
 export interface MemorySearchEvent {
   readonly version: 1
-  readonly provider: 'local-session-query'
+  readonly provider: string
   readonly workspace: string
   readonly query: string
   readonly hits: readonly MemoryHit[]
@@ -52,7 +74,7 @@ declare module '@deepseek-ai/dsh-session/types' {
 
 export interface MemorySearchResult {
   /** Provider identifier recorded with the durable observation. */
-  readonly provider: 'local-session-query'
+  readonly provider: string
   /** Canonical workspace scope derived from the caller session. */
   readonly workspace: string
   /** Exact bounded text citations the consumer may expose to the model. */
