@@ -23,3 +23,4 @@ The service does not add model context unless a consumer explicitly records and 
 ## Known Limitations and Deferred Work
 
 - **Session-history provider only** — TencentDB Agent Memory, OpenViking retrieval depths, memory storage, and automatic extraction require separate providers and consumers.
+- **External API references only** — TencentDB MemoryCore documentation ([README](https://github.com/TencentCloud/TencentDB-Agent-Memory/blob/feat/server_team/MemoryCore/README.md)) and OpenViking retrieval/context-layer documentation ([retrieval](https://docs.openviking.ai/en/concepts/07-retrieval), [L0/L1/L2](https://github.com/volcengine/OpenViking/blob/main/docs/en/concepts/03-context-layers.md)) are read-only design inputs. They are not runtime dependencies, and this package makes no network call or provider credential request.
