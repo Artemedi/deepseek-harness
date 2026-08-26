@@ -288,6 +288,23 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** Remote contract, memory service, invariant, and Loader composition tests passed `13/13`; the experimental memory package TypeScript check passed inside Node 22.
 - **Completion scope:** The local stub-backed adapter seam is complete. Live provider transport, credentials, and mounting remain intentionally outside this objective.
 
+## 2026-08-28: Mounted local TencentDB/OpenViking stubs
+
+- **DSH commit:** `d0c4f84240` (`feat: mount local remote memory stubs`).
+- **Change:** Explicit `memory_search` provider routes now include `tencentdb` and `openviking` deterministic local stubs. OpenViking requires explicit `L0`/`L1`/`L2` depth; remote hits preserve opaque source, kind, title, and exact bounded content without fabricated session ids or sequences.
+- **Durability and authorization:** DSH still derives workspace from the live Agent, appends `memory/search` before tool exposure, and keeps session history authoritative. The stubs make no network calls and request no credentials.
+- **Evidence:** Memory service, remote contract, invariant, and Loader composition tests passed `15/15`; memory and tool-memory TypeScript checks passed after building memory declarations.
+- **Documentation:** Memory and tool READMEs now describe explicit provider/depth fields and local-stub-only behavior.
+- **Next action:** Add assembled Loader assertions for remote tool routes and durable metadata before considering this stage complete.
+
+## 2026-08-28: Local remote providers fully composed
+
+- **DSH commit:** `8a27e579af` (`feat: mount local remote memory provider stubs`).
+- **Composition:** The real Loader test enables `local`, `tencentdb`, and `openviking`; explicit tool calls for TencentDB and OpenViking produce provider-neutral JSON and append three `memory/search` observations.
+- **Authorization:** The Loader scenario demonstrates workspace filtering: `/workspace/a` receives only its authorized TencentDB record. OpenViking depth `L1` returns only the selected depth records and requires explicit depth.
+- **Evidence:** Memory, remote contract, invariant, and Loader composition tests pass `15/15`; memory and tool-memory TypeScript checks pass after building memory declarations.
+- **Scope:** Providers are deterministic local stubs only. No external repository was changed, no network call or credential is used, and DSH session persistence remains authoritative.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
