@@ -186,3 +186,10 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Fix:** The keyless adapter now reads bounded text from the terminal `tool-result` content and returns it in the coordinator response. Production workflow and persistence code are unchanged.
 - **Evidence:** Node 22 refresh and replay both passed `1/1`; Harness orchestration and local-memory tests passed `9/9`.
 - **Next action:** Keep the workflow fixture as the keyless Ruflo-pattern evidence while external provider adapters remain gated on supplied API contracts and credentials.
+
+## 2026-08-26: DSH workflow fix remains unpublished
+
+- **DSH commit:** `9bcd24f52d` (`test: preserve workflow result in keyless snapshot`) fixes the coordinator result propagation regression after the assembled snapshot review.
+- **Push result:** HTTPS has no non-interactive credentials; the configured SSH deploy key is unauthorized for `deepseek-ai/deepseek-harness.git`.
+- **Evidence:** The commit is present locally and the updated refresh/replay evidence is `1/1` each.
+- **Next action:** Publish the two local DSH workflow commits after authorization; continue with external adapter contracts and structured pi-ai diagnostics investigation.
