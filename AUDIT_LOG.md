@@ -165,3 +165,10 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Result:** HTTPS has no non-interactive GitHub credentials; SSH was rejected because the deploy key has no permission to `deepseek-ai/deepseek-harness.git`.
 - **Decision:** Keep the DSH commits local and do not alter remotes, rewrite history, or force-push. Harness remains pushed and synchronized.
 - **Next action:** Continue keyless DSH workflow integration locally; obtain an authorized DSH contributor credential before publishing the existing commits.
+
+## 2026-08-26: Keyless coordinator and review workflow fixture
+
+- **Fixture:** Added a real headless Loader composition with a deterministic `workflow-mock` adapter. The parent invokes `workflow`; the worker-thread engine runs an explicit worker followed by an explicit review child through DSH `ctx.workflowEngine` and the existing spawn provider.
+- **Persistence:** The assembled transcript records `tool-workflow/run-start`, two `tool-workflow/agent-*` pairs, `tool-workflow/run-end`, and separate owned child session logs. No second scheduler or hidden prompt state was introduced.
+- **Evidence:** Node 22 replay after refresh passed `1/1` for the new bounded workflow snapshot. The expected transcript is stored under `examples/headless-agent/tests/snapshots/bounded-workflow/stream-json.expected.jsonl`.
+- **Next action:** Apply the external Ruflo preflight plan to this composition and add provider conformance only when TencentDB/OpenViking retrieval APIs or credentials are available.
