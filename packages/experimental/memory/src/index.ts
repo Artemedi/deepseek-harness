@@ -15,7 +15,7 @@ function MemoryId(id: string): MemoryId {
 }
 
 export type * from './types.ts'
-export { normalizeOpenVikingRecords, normalizeTencentDbRecords } from './remote-contract.ts'
+export { normalizeOpenVikingRecords, normalizeTencentDbRecords, remoteFailure } from './remote-contract.ts'
 export type { OpenVikingDepth, OpenVikingRecord, RemoteMemoryCitation, RemoteMemoryProvider, RemoteMemorySearchRequest, TencentDbRecord } from './remote-contract.ts'
 
 /** Maximum citations one request can return. */

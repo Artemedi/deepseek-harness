@@ -48,6 +48,18 @@ export interface OpenVikingRecord {
   readonly depth: OpenVikingDepth
 }
 
+/** Map a remote HTTP outcome to a stable DSH failure without retaining provider body text. */
+export function remoteFailure(status: number, provider: RemoteMemoryProvider['id']): HarnessError {
+  const code = status === 401 || status === 403
+    ? 'MEMORY_UNAUTHORIZED'
+    : status === 408 || status === 429 || status === 599
+      ? 'MEMORY_RETRYABLE'
+      : status >= 500 && status <= 599
+        ? 'MEMORY_PROVIDER_UNAVAILABLE'
+        : 'MEMORY_PROVIDER_ERROR'
+  return new HarnessError(`${provider} memory provider returned HTTP ${status}`, code)
+}
+
 /** Normalize a TencentDB response with workspace isolation and byte bounds. */
 export function normalizeTencentDbRecords(
   records: readonly TencentDbRecord[],

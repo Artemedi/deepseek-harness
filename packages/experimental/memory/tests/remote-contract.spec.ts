@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeOpenVikingRecords, normalizeTencentDbRecords } from '../src/remote-contract.ts'
+import { normalizeOpenVikingRecords, normalizeTencentDbRecords, remoteFailure } from '../src/remote-contract.ts'
 
 const request = (overrides: Partial<{ workspace: string; query: string; limit: number; maxContentBytes: number; signal: AbortSignal }> = {}) => ({
   workspace: '/workspace/a', query: 'retry', limit: 5, maxContentBytes: 100, signal: new AbortController().signal, ...overrides,
@@ -28,6 +28,13 @@ describe('remote memory contract normalizers', () => {
     expect(normalizeOpenVikingRecords(records, 'L1', request())).toEqual([{
       id: 'openviking:viking://team/private', kind: 'resource', title: 'L1', source: 'viking://team/private', content: 'detail',
     }])
+  })
+
+  it('maps remote HTTP failures without retaining provider bodies', () => {
+    expect(remoteFailure(401, 'tencentdb')).toMatchObject({ code: 'MEMORY_UNAUTHORIZED', message: 'tencentdb memory provider returned HTTP 401' })
+    expect(remoteFailure(429, 'openviking')).toMatchObject({ code: 'MEMORY_RETRYABLE' })
+    expect(remoteFailure(503, 'openviking')).toMatchObject({ code: 'MEMORY_PROVIDER_UNAVAILABLE' })
+    expect(remoteFailure(400, 'tencentdb')).toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
   })
 
   it('enforces UTF-8 bounds and cancellation', () => {
