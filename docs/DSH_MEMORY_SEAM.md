@@ -8,8 +8,9 @@
 
 ```ts
 interface MemoryScope {
-  readonly userId: string
+  /** Canonical caller Session cwd; the first local authorization boundary. */
   readonly workspace: string
+  /** Optional provider-specific extensions derived by trusted DSH services. */
   readonly teamId?: string
   readonly agentId?: string
   readonly taskId?: string
@@ -113,7 +114,7 @@ A later automatic injection plugin may use a prior durable `memory/search` event
 
 ## Authorization
 
-The service requires an authenticated owner scope. A provider may further constrain individual resource ACLs, but it cannot widen a DSH caller from one user/workspace/team/agent/task scope to another. Workspace path canonicalization and session owner identity are owned by DSH, not provider-supplied strings.
+The first consumer derives `workspace` from the calling Agent's canonical `SessionHeader.cwd` and rejects a caller without a workspace. It never accepts a user-supplied workspace or owner id as authorization. A provider may further constrain individual resource ACLs, but it cannot widen a DSH caller from one workspace/team/agent/task scope to another. Workspace path canonicalization and session owner identity are owned by DSH, not provider-supplied strings.
 
 ## Verification
 

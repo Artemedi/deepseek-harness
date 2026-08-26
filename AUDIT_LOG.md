@@ -78,6 +78,12 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Provider stance:** TencentDB and OpenViking are replaceable remote providers. DSH session history remains authoritative and replayable when either external service is unavailable or changes.
 - **Next action:** Implement the local provider and `memory_search` consumer as a DSH experimental plugin, then use the same conformance fixtures for TencentDB and OpenViking adapters.
 
+## 2026-08-26: Memory scope ownership clarified
+
+- **Decision:** The first memory consumer derives workspace scope from the calling Agent's canonical `SessionHeader.cwd`; it does not accept user-supplied owner or workspace ids.
+- **Reason:** This follows the existing `session-query` authorization model and keeps provider strings from widening access outside DSH's workspace authority.
+- **Next action:** Implement the experimental local provider only after its domain records, byte bounds, and model-facing durable event payload are covered by tests.
+
 ## 2026-08-26: DSH P0 fix completed locally
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.
