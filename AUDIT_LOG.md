@@ -40,3 +40,9 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Decision:** Do not start containers without both independent LLM credential groups. No partial stack was created.
 - **Blocker:** `MEMORY_LLM_BASE_URL`, `MEMORY_LLM_API_KEY`, `MEMORY_LLM_MODEL`, `PROXY_UPSTREAM_URL`, `PROXY_UPSTREAM_API_KEY`, and `PROXY_UPSTREAM_MODEL` are not available in this environment.
 - **Next action:** Supply credentials through an untracked local `.env`, run `./run.sh validate`, then `./run.sh start` and the proxy probe.
+
+## 2026-08-26: Image digests pinned
+
+- **Pinned images:** `memory-core@sha256:9798254a8cc06276b7c5b3c19df49f136fae25d579564e1f01f9c4b9b8cd2d11`, `memory-hub@sha256:39548fd616f6f211ad2288e33fe5e93870b705cffe0468047520cd786408e657`, and `memory-proxy@sha256:c8de30142787a5df7937c02c167f2ee37f00505b79036357653a6ce78a29fba5`.
+- **Reason:** Avoid silently changing the integration runtime when upstream `latest` tags move.
+- **Next action:** Review the pinned upstream release and run the stack only with local credentials supplied outside Git.
