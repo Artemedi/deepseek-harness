@@ -36,6 +36,11 @@ def request(url: str, *, method: str = "GET", payload: bytes | None = None, toke
         return Response(0, str(err.reason), {})
 
 
+def header(response: Response, name: str) -> str | None:
+    wanted = name.lower()
+    return next((value for key, value in response.headers.items() if key.lower() == wanted), None)
+
+
 def classify(body: str) -> str:
     try:
         parsed: Any = json.loads(body)
@@ -72,7 +77,7 @@ def main() -> int:
         return 2
     payload = json.dumps({"model": args.model, "messages": [{"role": "user", "content": "ping"}], "stream": False, "max_tokens": 8}).encode("utf-8")
     chat = request(f"{base_url}/chat/completions", method="POST", payload=payload, token=args.token)
-    print(json.dumps({"check": "chat-completions", "status": chat.status, "classification": classify(chat.body), "request_id": chat.headers.get("x-request-id") or chat.headers.get("x-correlation-id")}, ensure_ascii=False))
+    print(json.dumps({"check": "chat-completions", "status": chat.status, "classification": classify(chat.body), "request_id": header(chat, "x-request-id") or header(chat, "x-correlation-id")}, ensure_ascii=False))
     return 0 if chat.status < 500 else 1
 
 

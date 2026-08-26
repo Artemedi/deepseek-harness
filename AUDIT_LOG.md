@@ -54,3 +54,11 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Decision:** Keep this incident in the P0 gateway reliability track. Do not treat `PI_AI_ERROR` as evidence that TencentDB memory or OpenViking context is functioning.
 - **Required follow-up:** Capture the gateway response status, headers, and redacted body at the provider boundary; preserve them in `LlmFailure`; classify transient upstream failures separately from unknown pi-ai errors; add a keyless assembled regression.
 - **Next action:** Reproduce with a local stub that emits the minimal gateway `api_error` envelope, then trace it through `llm-pi-ai`, session finish events, API transport, and Web UI.
+
+## 2026-08-26: Deterministic gateway-error probe
+
+- **Fixture:** `integrations/tencentdb-agent-memory/stub_gateway.py` returns `502`, `{"error":{"type":"api_error","message":"Upstream error."}}`, and `X-Request-ID: stub-request-0001` without contacting an LLM provider.
+- **Command:** `TDAI_PROXY_BASE_URL=http://127.0.0.1:18096/dsh/default TDAI_PROXY_MODEL=stub python3 integrations/tencentdb-agent-memory/probe.py --check-chat`.
+- **Result:** Health returned 200. The chat probe returned status 502, `gateway-upstream-error`, and `request_id: stub-request-0001`. The probe exited nonzero as required for a failed upstream request.
+- **Fix discovered:** Header lookup was case-sensitive and hid `X-Request-ID`; the probe now reads request-id and correlation-id case-insensitively.
+- **Next action:** Port the same fixture semantics to the DSH pi-ai adapter and Web assembled regression, preserving the request id and a retryable upstream classification where status/retry facts justify it.

@@ -28,6 +28,15 @@ TDAI_PROXY_BASE_URL=http://127.0.0.1:18096/dsh/default python3 probe.py
 
 A chat probe requires both `--check-chat` and a model. It intentionally sends only `ping` and does not print authorization headers or request bodies.
 
+For deterministic gateway-error regression without an LLM key, run the local stub in one terminal and probe it in another:
+
+```bash
+python3 stub_gateway.py
+TDAI_PROXY_BASE_URL=http://127.0.0.1:18096/dsh/default TDAI_PROXY_MODEL=stub python3 probe.py --check-chat
+```
+
+The expected classification is `gateway-upstream-error`, with the stub request id shown separately. The stub never forwards content to a provider.
+
 ## DSH Route
 
 Copy the values from `dsh-settings.yaml.example` into a non-default DSH profile or settings scope, replacing the port when needed. Do not replace the default production/free-model route until P0 gateway diagnostics are fixed.
