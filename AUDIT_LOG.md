@@ -207,3 +207,11 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Push result:** DSH commit `2715bc03c2` could not be pushed: HTTPS has no available GitHub credential and the available SSH deploy key is unauthorized for the upstream DSH repository.
 - **Published audit:** This limitation is recorded in Harness commit `b4267af` and pushed to `origin/main`.
 - **Next action:** Obtain DSH repository authorization or an upstream pi-ai failed-response hook; do not force-push or alter remotes.
+
+## 2026-08-26: DSH memory search cancellation guard
+
+- **DSH commit:** `afe0a966a2` (`fix: fail fast cancelled memory searches`).
+- **Behavior:** `ctx.memory.search()` now rejects an already-aborted request before calling the session-query provider. This preserves cancellation ownership and prevents a cancelled model/tool operation from starting external or durable reads.
+- **Evidence:** Memory service, package invariant, and real Loader composition tests passed `7/7`.
+- **Design limit:** `memory/store` remains deferred because session-query intentionally excludes unknown declaration-merged events from searchable text; adding storage without an indexed first-party consumer would create an unowned persistence contract.
+- **Next action:** Add remote adapter conformance only behind supplied TencentDB/OpenViking retrieval APIs; keep DSH session events authoritative.
