@@ -62,6 +62,9 @@ const headlessFailureExpected = join(snapshotsDir, 'headless-profile', 'stderr.e
 const memoryScenarioDir = join(snapshotsDir, 'experimental-memory')
 const memoryConfigPath = fileURLToPath(new URL('./fixtures/memory.cordis.snapshot.yml', import.meta.url))
 const memoryStreamExpected = join(memoryScenarioDir, 'stream-json.expected.jsonl')
+const workflowScenarioDir = join(snapshotsDir, 'bounded-workflow')
+const workflowConfigPath = fileURLToPath(new URL('./fixtures/workflow.cordis.snapshot.yml', import.meta.url))
+const workflowStreamExpected = join(workflowScenarioDir, 'stream-json.expected.jsonl')
 const cliMockLlmPluginPath = fileURLToPath(new URL('./fixtures/cli-mock-llm.ts', import.meta.url))
 const refreshing = process.env.DSH_SNAPSHOT === 'refresh'
 
@@ -341,6 +344,37 @@ describe('headless stream-json snapshots', () => {
     const normalized = normalizeHeadlessStream(result.stdout, runCwd)
     if (refreshing) await mkdir(memoryScenarioDir, { recursive: true }).then(() => writeFile(memoryStreamExpected, normalized))
     expect(normalized).toBe(await readFile(memoryStreamExpected, 'utf8'))
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+
+  it('runs a bounded coordinator, worker, and review through the real one-shot app', async () => {
+    let runCwd = ''
+    const result = await runLoaderSmoke({
+      label: 'bounded workflow headless stream-json snapshot',
+      tempDirPrefix: 'headless-snapshot-bounded-workflow-',
+      binScript,
+      libBinScript: binScript,
+      configPath: workflowConfigPath,
+      binArgs: [workflowConfigPath, 'Run the bounded workflow.'],
+      tsconfigPath,
+      env: {
+        DSH_SNAPSHOT: 'replay',
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+      },
+      prepare: (cwd) => { runCwd = cwd },
+      inspect: async (cwd) => {
+        const logs = await persistedLogs(cwd)
+        expect(logs.length).toBeGreaterThanOrEqual(3)
+        const content = logs.map(log => log.content).join('\n')
+        expect(content).toContain('tool-workflow/run-start')
+        expect(content).toContain('tool-workflow/agent-start')
+        expect(content).toContain('tool-workflow/agent-end')
+        expect(content).toContain('tool-workflow/run-end')
+      },
+    })
+    expect(result.stderr).toBe('')
+    const normalized = normalizeHeadlessStream(result.stdout, runCwd)
+    if (refreshing) await mkdir(workflowScenarioDir, { recursive: true }).then(() => writeFile(workflowStreamExpected, normalized))
+    expect(normalized).toBe(await readFile(workflowStreamExpected, 'utf8'))
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
   it('retries a transient provider failure through the one-shot app', async () => {
