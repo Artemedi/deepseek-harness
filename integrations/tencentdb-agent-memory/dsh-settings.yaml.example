@@ -1,0 +1,7 @@
+# Opt-in TencentDB Agent Memory Proxy route for DeepSeek Harness.
+# Keep this outside the default profile until gateway error propagation is fixed.
+llm-deepseek:
+  apiKeyEnv: TDAI_PROXY_USER_KEY
+  # TencentDB's dsh route intentionally has no trailing /v1.
+  baseURL: http://127.0.0.1:8096/dsh/default
+  reasoningEffort: high
