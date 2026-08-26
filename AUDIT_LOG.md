@@ -93,3 +93,10 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** In an isolated Node 22 workspace, `pnpm exec vitest run packages/llm/llm-pi-ai/tests/adapter.spec.ts packages/llm/llm-pi-ai/tests/convert.spec.ts` passed 120/120 tests.
 - **Limit:** pi-ai retains the 502 prefix in message text but does not expose the HTTP status or request id as structured `LlmFailure` facts. Retry now works; observability remains unfinished.
 - **Next action:** Add agent-loop/Web assembled retry coverage, then instrument the adapter or upstream SDK where structured response facts can be captured.
+
+## 2026-08-26: P0 boundary and retry evidence confirmed
+
+- **DSH tests:** `packages/llm/llm-pi-ai/tests/adapter.spec.ts` plus `convert.spec.ts` passed 120/120 in an isolated Node 22 workspace. `packages/llm/llm-retry/tests/transport-recovery.spec.ts` passed 7/7.
+- **Observed path:** HTTP 502 with `{"error":{"type":"api_error","message":"Upstream error."}}` reaches the pi-ai adapter, retains `Upstream error.` in the failure message, maps to `SERVER`, and is eligible for the existing bounded retry policy.
+- **Remaining gap:** The adapter does not yet expose HTTP status or `X-Request-ID` as structured `LlmFailure` fields because pi-ai flattens the upstream response before DSH receives it.
+- **Next action:** Add assembled agent-loop/Web evidence and investigate a capture hook at the pi-ai HTTP provider boundary.
