@@ -22,7 +22,7 @@ if [[ -f "$ENV_FILE" ]]; then
   set -a
   # shellcheck disable=SC1090
   source "$ENV_FILE"
-  seta
+  set +a
 fi
 
 require_var() {
@@ -92,10 +92,12 @@ tdai:
   enabled: true
   endpoint: "http://memory-core:8420"
   serviceId: default
-  memory: { enabled: true, inject: true, writeL0: true, recallL1: true, injectL2L3: true }
+  # DSH-native memory retrieval must remain explicit and log citations before
+  # model use; proxy-side context injection would be unreplayable hidden state.
+  memory: { enabled: true, inject: false, writeL0: true, recallL1: true, injectL2L3: false }
 auth: { enabled: false }
 sessionInit: { enabled: false }
-injection: { enabled: true, injectors: [tdai-memory] }
+injection: { enabled: false }
 redis: { enabled: false }
 EOF
 }

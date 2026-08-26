@@ -115,6 +115,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Decision:** Do not ship an adapter workaround that claims structured-field preservation without evidence. The next valid implementation requires an upstream pi-ai change that forwards error response metadata, or an adapter-owned fetch/API path with equivalent retry, auth, stream, and replay semantics.
 - **Evidence:** Local Node 22 adapter attempt was reverted after the focused test showed status/request id remained absent; existing adapter/convert/retry coverage remained intact in the prior verified commit.
 
+## 2026-08-26: external memory adapter contract and runner hardening
+
+- **Runner fix:** Corrected the TencentDB Podman runner's environment cleanup from the invalid `seta` command to `set +a`; `bash -n` passes.
+- **Replay rule:** Generated TencentDB proxy configuration now disables proxy-side injection. DSH-native retrieval must append exact citations before model use; proxy injection would create unreplayable hidden context.
+- **Adapter contract:** Added `docs/EXTERNAL_MEMORY_ADAPTERS.md` covering typed TencentDB resource mappings, explicit OpenViking L0/L1/L2 reads, opaque ids, bounds, typed failures, replay, rollback, and required conformance cases.
+- **Evidence:** Local provider unittest passes 4/4. TencentDB `validate` fails closed without `.env` and prints no credentials. No TencentDB credentials were available, so the container stack and live provider behavior were not claimed.
+- **Next action:** Implement stub-backed TencentDB/OpenViking adapters only after their retrieval APIs and credential profiles are supplied; retain direct DSH routing as rollback.
+
 ## 2026-08-26: DSH P0 fix completed locally
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.
