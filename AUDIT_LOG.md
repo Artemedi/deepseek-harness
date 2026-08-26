@@ -215,3 +215,9 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** Memory service, package invariant, and real Loader composition tests passed `7/7`.
 - **Design limit:** `memory/store` remains deferred because session-query intentionally excludes unknown declaration-merged events from searchable text; adding storage without an indexed first-party consumer would create an unowned persistence contract.
 - **Next action:** Add remote adapter conformance only behind supplied TencentDB/OpenViking retrieval APIs; keep DSH session events authoritative.
+
+## 2026-08-26: Memory cancellation guard remains local
+
+- **Push result:** DSH commit `afe0a966a2` could not be published through HTTPS (no credential) or the available SSH deploy key (unauthorized for `deepseek-ai/deepseek-harness.git`).
+- **Published audit:** Harness commit `f72f17f` records this result and is synchronized with `origin/main`.
+- **Next action:** Obtain DSH contributor authorization before publishing local commits; continue only with locally verifiable seams and no remote-provider claims.
