@@ -32,3 +32,11 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Validation:** `bash -n integrations/tencentdb-agent-memory/run.sh` and `python3 -m py_compile integrations/tencentdb-agent-memory/probe.py` passed. Missing `.env` exits before container creation. Placeholder credentials exit before image pulls.
 - **Result:** TencentDB images were not present locally and no LLM credentials are available in this environment, so the stack was intentionally not started.
 - **Next action:** Provide local LLM credentials, run `./run.sh start`, then execute the proxy probe and record health/chat results.
+
+## 2026-08-26: TencentDB images pulled
+
+- **Command:** `podman pull agentmemory/memory-core:latest`; `podman pull agentmemory/memory-hub:latest`; `podman pull agentmemory/memory-proxy:latest`.
+- **Result:** All three public images pulled successfully into the local Podman image store. The runner uses the `latest` tags from `.env.example`; pin immutable digests before a production deployment.
+- **Decision:** Do not start containers without both independent LLM credential groups. No partial stack was created.
+- **Blocker:** `MEMORY_LLM_BASE_URL`, `MEMORY_LLM_API_KEY`, `MEMORY_LLM_MODEL`, `PROXY_UPSTREAM_URL`, `PROXY_UPSTREAM_API_KEY`, and `PROXY_UPSTREAM_MODEL` are not available in this environment.
+- **Next action:** Supply credentials through an untracked local `.env`, run `./run.sh validate`, then `./run.sh start` and the proxy probe.
