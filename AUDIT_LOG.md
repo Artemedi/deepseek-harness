@@ -249,6 +249,13 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Unresolved external conditions:** TencentDB/OpenViking retrieval API contracts and credentials were not supplied; no live provider adapter or live deployment claim is made. The current public pi-ai path still does not expose failed-response request id/headers. The available DSH deploy key cannot publish to `deepseek-ai/deepseek-harness.git`, and HTTPS has no credential.
 - **Next action:** Resume implementation when provider contracts/credentials or an authorized DSH upstream credential are available; do not force-push, vendor OpenViking, or enable hidden proxy injection.
 
+## 2026-08-26: Public provider documentation reviewed read-only
+
+- **Sources:** Reviewed the public [TencentDB MemoryCore README](https://github.com/TencentCloud/TencentDB-Agent-Memory/blob/feat/server_team/MemoryCore/README.md), [OpenViking retrieval documentation](https://docs.openviking.ai/en/concepts/07-retrieval), and [OpenViking L0/L1/L2 context layers](https://github.com/volcengine/OpenViking/blob/main/docs/en/concepts/03-context-layers.md).
+- **Decision:** These public projects are documentation inputs only. No external repository was modified, no access credential is needed, and local DeepSeek Harness remains the only codebase being changed.
+- **Local result:** The experimental memory README now links the sources and states that they are not runtime dependencies or credential/network paths. The current local provider remains session-history-only until stub-backed adapters are implemented.
+- **Next action:** Implement TencentDB/OpenViking adapters locally against explicit stub contracts derived from these references, preserving DSH durable observations and authorization.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
