@@ -36,6 +36,11 @@ export function mapUsage(usage: PiUsage): TokenUsage {
 // wrapper a bare `terminated`, so we are left pattern-matching terse words here.
 // If pi-ai ever forwards the original Error (or a fetch/dispatcher hook that lets
 // us capture the cause ourselves), classify on `code`/`cause` instead of text.
+function httpStatusOf(message: string): number | undefined {
+  const match = message.match(/(?:^|HTTP\s+|API error\s*\()([1-5]\d\d)\b/i)
+  return match === null ? undefined : Number(match[1])
+}
+
 function classifyPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
@@ -84,11 +89,13 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     && message.errorMessage !== undefined
     && isContextWindowExceededError(message.errorMessage)
   if (piAiOverflow || harnessOverflow) {
+    const text = message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`
     return {
       kind: 'error',
       failure: {
-        message: message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`,
+        message: text,
         code: CONTEXT_WINDOW_EXCEEDED_CODE,
+        ...httpStatusOf(text) === undefined ? {} : { status: httpStatusOf(text) },
       },
     }
   }
@@ -115,7 +122,14 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
-      return { kind: 'error', failure: { message: text, code: classifyPiAiError(text) } }
+      return {
+        kind: 'error',
+        failure: {
+          message: text,
+          code: classifyPiAiError(text),
+          ...httpStatusOf(text) === undefined ? {} : { status: httpStatusOf(text) },
+        },
+      }
     }
   }
 }
