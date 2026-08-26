@@ -59,7 +59,9 @@ import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
 import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
 import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
+import MemoryService from '@deepseek-ai/dsh-experimental-memory'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
+import * as ToolMemory from '@deepseek-ai/dsh-experimental-tool-memory'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
@@ -437,6 +439,22 @@ const TOOL_PACKAGES: ToolPackage[] = [
       })
       await ctx.plugin(ToolSkill)
     },
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-memory',
+    dir: 'tool-memory',
+    source: 'packages/experimental/tool-memory/src/index.ts',
+    requires: ['ctx.tools', 'ctx.memory', 'ctx.sessionQuery', 'a calling Agent for workspace authority'],
+    writes: ['tool/call', 'memory/search exact bounded citations', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(AgentRegistry)
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(SqliteSessionQueryEngine, { path: ':memory:' })
+      await ctx.plugin(MemoryService)
+      await ctx.plugin(ToolMemory)
+    },
+    note:
+      'Opt-in experimental retrieval over same-workspace session history. The tool records the exact bounded citations in memory/search before returning its JSON result; TencentDB and OpenViking providers are deferred.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-session-query',

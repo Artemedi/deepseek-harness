@@ -59,6 +59,9 @@ const deepseekDefaultsConfigPath = fileURLToPath(new URL('./fixtures/deepseek-de
 const headlessOverlayPath = fileURLToPath(new URL('./fixtures/headless-profile.cordis.yml', import.meta.url))
 const headlessSessionExpected = join(snapshotsDir, 'headless-profile', 'session.expected.jsonl')
 const headlessFailureExpected = join(snapshotsDir, 'headless-profile', 'stderr.expected.txt')
+const memoryScenarioDir = join(snapshotsDir, 'experimental-memory')
+const memoryConfigPath = fileURLToPath(new URL('./fixtures/memory.cordis.snapshot.yml', import.meta.url))
+const memoryStreamExpected = join(memoryScenarioDir, 'stream-json.expected.jsonl')
 const cliMockLlmPluginPath = fileURLToPath(new URL('./fixtures/cli-mock-llm.ts', import.meta.url))
 const refreshing = process.env.DSH_SNAPSHOT === 'refresh'
 
@@ -310,6 +313,34 @@ describe('headless stream-json snapshots', () => {
     })
     expect(result.stdout).toBe('')
     await expect(result.stderr).toMatchFileSnapshot(startupFailureExpected)
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+
+  it('runs the opt-in experimental memory tool through the real one-shot app', async () => {
+    let runCwd = ''
+    const result = await runLoaderSmoke({
+      label: 'experimental memory headless stream-json snapshot',
+      tempDirPrefix: 'headless-snapshot-experimental-memory-',
+      binScript,
+      libBinScript: binScript,
+      configPath: memoryConfigPath,
+      binArgs: [memoryConfigPath, 'Find the retry evidence.'],
+      tsconfigPath,
+      env: {
+        DSH_SNAPSHOT: 'replay',
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+      },
+      prepare: (cwd) => { runCwd = cwd },
+      inspect: async (cwd) => {
+        const logs = await persistedLogs(cwd)
+        expect(logs).toHaveLength(1)
+        expect(logs[0]?.content).toContain('memory/search')
+        expect(logs[0]?.content).toContain('gateway retry evidence is recorded')
+      },
+    })
+    expect(result.stderr).toBe('')
+    const normalized = normalizeHeadlessStream(result.stdout, runCwd)
+    if (refreshing) await mkdir(memoryScenarioDir, { recursive: true }).then(() => writeFile(memoryStreamExpected, normalized))
+    expect(normalized).toBe(await readFile(memoryStreamExpected, 'utf8'))
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
   it('retries a transient provider failure through the one-shot app', async () => {

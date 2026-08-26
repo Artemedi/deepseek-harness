@@ -498,6 +498,19 @@ Source: [`packages/llm/llm-retry/src/types.ts:9`](../packages/llm/llm-retry/src/
 
 Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
 
+### `memory/*`
+
+<a id="memorysearch--log-only"></a>
+
+#### `memory/search` — log-only
+
+```ts persistence-catalog
+/** Exact bounded citations returned by one explicit memory search. */
+'memory/search': MemorySearchEvent
+```
+
+Source: [`packages/experimental/memory/src/types.ts:49`](../packages/experimental/memory/src/types.ts)
+
 ### `permission/*`
 
 <a id="permissionpreset--log-only"></a>
