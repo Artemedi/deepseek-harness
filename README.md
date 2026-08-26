@@ -20,7 +20,7 @@ The first integrations are:
 4. Add TencentDB and OpenViking providers behind that capability.
 5. Apply Ruflo-style task DAG, coordinator, budget, and review patterns to existing DSH primitives.
 
-The detailed decision record is in [`docs/INTEGRATION_PLAN.md`](docs/INTEGRATION_PLAN.md). Every operational change is recorded in [`AUDIT_LOG.md`](AUDIT_LOG.md).
+The detailed decision record is in [`docs/INTEGRATION_PLAN.md`](docs/INTEGRATION_PLAN.md). The provider-neutral DSH memory contract is in [`docs/DSH_MEMORY_SEAM.md`](docs/DSH_MEMORY_SEAM.md). Every operational change is recorded in [`AUDIT_LOG.md`](AUDIT_LOG.md).
 
 ## Quick Start
 

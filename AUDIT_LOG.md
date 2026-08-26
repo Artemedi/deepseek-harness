@@ -62,3 +62,18 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Result:** Health returned 200. The chat probe returned status 502, `gateway-upstream-error`, and `request_id: stub-request-0001`. The probe exited nonzero as required for a failed upstream request.
 - **Fix discovered:** Header lookup was case-sensitive and hid `X-Request-ID`; the probe now reads request-id and correlation-id case-insensitively.
 - **Next action:** Port the same fixture semantics to the DSH pi-ai adapter and Web assembled regression, preserving the request id and a retryable upstream classification where status/retry facts justify it.
+
+## 2026-08-26: DSH pi-ai recovery classification
+
+- **Change:** The exact flattened pi-ai error message `Upstream error.` now maps to DSH code `SERVER` instead of `PI_AI_ERROR`.
+- **Reason:** pi-ai discards the gateway status and cause chain before DSH receives the terminal stream event. The exact minimal envelope contains no permanent-rejection fact, so `SERVER` activates the provider's existing bounded retry policy.
+- **Evidence:** In an isolated Node 22 workspace, `pnpm exec vitest run packages/llm/llm-pi-ai/tests/convert.spec.ts` passed 72/72 tests, including the new classification regression.
+- **Limit:** This does not preserve HTTP status, provider identity, raw gateway body, retry-after, or request id in DSH. The direct adapter/gateway instrumentation work remains required.
+- **Next action:** Add a full assembled DSH retry and Web presentation regression using the same minimal envelope.
+
+## 2026-08-26: DSH-native memory seam contract
+
+- **Document:** `docs/DSH_MEMORY_SEAM.md` defines the proposed experimental `ctx.memory` service, provider-neutral resource kinds, scopes, bounded searches, explicit store requests, and provider mappings.
+- **Invariant:** Any recalled text that reaches a model is first retained in a durable `memory/search` session event. The first consumer is an explicit `memory_search` tool; hidden pre-request recall is deferred.
+- **Provider stance:** TencentDB and OpenViking are replaceable remote providers. DSH session history remains authoritative and replayable when either external service is unavailable or changes.
+- **Next action:** Implement the local provider and `memory_search` consumer as a DSH experimental plugin, then use the same conformance fixtures for TencentDB and OpenViking adapters.
