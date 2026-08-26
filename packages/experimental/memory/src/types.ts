@@ -11,11 +11,17 @@ export interface MemoryHit {
   /** Stable local identity formed from the source session and event sequence. */
   readonly id: MemoryId
   /** Source session that owns the cited event. */
-  readonly sessionId: SessionId
+  readonly sessionId?: SessionId
   /** Source event sequence in that session. */
-  readonly seq: number
+  readonly seq?: number
   /** First-party event type that supplied the cited text. */
-  readonly eventType: string
+  readonly eventType?: string
+  /** Provider resource kind, when the source is remote. */
+  readonly kind?: 'memory' | 'skill' | 'wiki' | 'code-graph' | 'resource'
+  /** Human-readable provider title, when available. */
+  readonly title?: string
+  /** Opaque provider source, when available. */
+  readonly source?: string
   /** Bounded text that may be shown to the model. */
   readonly content: string
 }
@@ -28,6 +34,10 @@ export interface MemorySearchRequest {
   readonly limit?: number
   /** Maximum UTF-8 bytes across every returned citation. */
   readonly maxContentBytes?: number
+  /** Explicit provider route; local is the default. */
+  readonly provider?: 'local' | 'tencentdb' | 'openviking'
+  /** Required when provider is OpenViking. */
+  readonly depth?: 'L0' | 'L1' | 'L2'
   /** Cancellation for corpus reads. */
   readonly signal: AbortSignal
 }
@@ -42,6 +52,8 @@ export interface MemoryProviderSearchRequest {
   readonly limit: number
   /** Validated aggregate UTF-8 byte bound. */
   readonly maxContentBytes: number
+  /** Explicit OpenViking retrieval depth, required by that provider. */
+  readonly depth?: 'L0' | 'L1' | 'L2'
   /** Cancellation owned by the calling operation. */
   readonly signal: AbortSignal
 }

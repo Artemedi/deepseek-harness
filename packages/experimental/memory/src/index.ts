@@ -9,6 +9,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import type { MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult } from './types.ts'
+import { normalizeOpenVikingRecords, normalizeTencentDbRecords, OPENVIKING_STUB_RECORDS, TENCENTDB_STUB_RECORDS } from './remote-contract.ts'
 
 function MemoryId(id: string): MemoryId {
   return id as MemoryId
@@ -24,6 +25,22 @@ export const MAX_MEMORY_HITS = 20
 export const MAX_MEMORY_CONTENT_BYTES = 32_768
 
 /** Provider backed by DSH's existing workspace-authorized session-query corpus. */
+class StubTencentDbProvider implements MemoryProvider {
+  readonly id = 'tencentdb'
+
+  async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
+    return normalizeTencentDbRecords(TENCENTDB_STUB_RECORDS, request)
+  }
+}
+
+class StubOpenVikingProvider implements MemoryProvider {
+  readonly id = 'openviking'
+
+  async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
+    return normalizeOpenVikingRecords(OPENVIKING_STUB_RECORDS, request.depth, request)
+  }
+}
+
 class LocalSessionMemoryProvider implements MemoryProvider {
   readonly id = 'local-session-query'
 
@@ -56,12 +73,15 @@ export interface Config {
   readonly defaultLimit?: number
   /** Default aggregate UTF-8 citation cap. */
   readonly defaultMaxContentBytes?: number
+  /** Explicitly enabled local provider routes; local is always available. */
+  readonly providers?: string[]
 }
 
 /** Loader configuration for the experimental local provider. */
 export const Config: z<Config> = z.object({
   defaultLimit: z.number().step(1).min(1).max(MAX_MEMORY_HITS).default(5),
   defaultMaxContentBytes: z.number().step(1).min(1).max(MAX_MEMORY_CONTENT_BYTES).default(8_192),
+  providers: z.array(z.string()).default(['local']),
 })
 
 declare module '@deepseek-ai/cordis' {
@@ -75,7 +95,7 @@ export default class MemoryService extends Service {
   static inject = ['agents', 'sessionQuery']
 
   private readonly config: Required<Config>
-  private readonly provider: MemoryProvider
+  private readonly providers: Map<string, MemoryProvider>
 
   /** @param ctx - owning Cordis context. @param config - retrieval caps. */
   constructor(ctx: Context, config: Config = {}) {
@@ -83,8 +103,15 @@ export default class MemoryService extends Service {
     this.config = {
       defaultLimit: config.defaultLimit ?? 5,
       defaultMaxContentBytes: config.defaultMaxContentBytes ?? 8_192,
+      providers: config.providers ?? ['local'],
     }
-    this.provider = new LocalSessionMemoryProvider(ctx.sessionQuery)
+    const available = new Map<string, MemoryProvider>([
+      ['local', new LocalSessionMemoryProvider(ctx.sessionQuery)],
+      ['tencentdb', new StubTencentDbProvider()],
+      ['openviking', new StubOpenVikingProvider()],
+    ])
+    this.providers = new Map(this.config.providers.map(id => [id, available.get(id)!]))
+    if (!this.providers.has('local')) this.providers.set('local', available.get('local')!)
   }
 
   /**
@@ -113,7 +140,14 @@ export default class MemoryService extends Service {
     }
     if (request.signal.aborted) throw request.signal.reason
 
-    const hits = await this.provider.search({ workspace, query, limit, maxContentBytes, signal: request.signal })
-    return { provider: this.provider.id, workspace, hits }
+    const providerId = request.provider ?? 'local'
+    const provider = this.providers.get(providerId)
+    if (provider === undefined) throw new HarnessError(`memory provider "${providerId}" is not enabled`, 'MEMORY_PROVIDER_ERROR')
+    if (providerId === 'openviking' && request.depth === undefined) {
+      throw new HarnessError('OpenViking retrieval depth is required', 'MEMORY_INVALID_REQUEST')
+    }
+    const providerRequest: MemoryProviderSearchRequest = { workspace, query, limit, maxContentBytes, signal: request.signal, ...request.depth === undefined ? {} : { depth: request.depth } }
+    const hits = await provider.search(providerRequest)
+    return { provider: provider.id, workspace, hits }
   }
 }

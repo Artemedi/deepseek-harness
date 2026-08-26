@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeOpenVikingRecords, normalizeTencentDbRecords, remoteFailure } from '../src/remote-contract.ts'
+import { normalizeOpenVikingRecords, normalizeTencentDbRecords, OPENVIKING_STUB_RECORDS, remoteFailure, TENCENTDB_STUB_RECORDS } from '../src/remote-contract.ts'
 
 const request = (overrides: Partial<{ workspace: string; query: string; limit: number; maxContentBytes: number; signal: AbortSignal }> = {}) => ({
   workspace: '/workspace/a', query: 'retry', limit: 5, maxContentBytes: 100, signal: new AbortController().signal, ...overrides,

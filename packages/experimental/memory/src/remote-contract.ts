@@ -12,6 +12,7 @@ export interface RemoteMemorySearchRequest {
   readonly query: string
   readonly limit: number
   readonly maxContentBytes: number
+  readonly depth?: OpenVikingDepth
   readonly signal: AbortSignal
 }
 
@@ -40,6 +41,11 @@ export interface TencentDbRecord {
   readonly workspace: string
 }
 
+/** Deterministic local TencentDB stub record. */
+export const TENCENTDB_STUB_RECORDS: readonly TencentDbRecord[] = [{
+  id: 'stub-chat-1', kind: 'memory', title: 'Gateway retry', content: 'TencentDB stub retry evidence', source: 'chat-memory', workspace: '/workspace/stub',
+}]
+
 /** Minimal OpenViking record accepted by the local stub adapter. */
 export interface OpenVikingRecord {
   readonly uri: string
@@ -47,6 +53,13 @@ export interface OpenVikingRecord {
   readonly content: string
   readonly depth: OpenVikingDepth
 }
+
+/** Deterministic local OpenViking stub records. */
+export const OPENVIKING_STUB_RECORDS: readonly OpenVikingRecord[] = [{
+  uri: 'viking://stub/retry', title: 'Retry summary', content: 'OpenViking stub retry evidence', depth: 'L0',
+}, {
+  uri: 'viking://stub/retry', title: 'Retry detail', content: 'OpenViking stub retry detail', depth: 'L1',
+}]
 
 /** Map a remote HTTP outcome to a stable DSH failure without retaining provider body text. */
 export function remoteFailure(status: number, provider: RemoteMemoryProvider['id']): HarnessError {

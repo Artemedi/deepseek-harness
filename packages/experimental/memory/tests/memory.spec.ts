@@ -60,7 +60,7 @@ function agentFor(ctx: Context, session: Session): { agent: Agent; dispose: () =
   return { agent, dispose: ctx.agents.register(agent) }
 }
 
-async function setup(cwd?: string, documentText = 'gateway retry evidence'): Promise<{ ctx: Context; agent: Agent; service: MemoryService; disposeAgent: () => void }> {
+async function setup(cwd?: string, documentText = 'gateway retry evidence', config?: { providers?: string[] }): Promise<{ ctx: Context; agent: Agent; service: MemoryService; disposeAgent: () => void }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
@@ -80,7 +80,7 @@ async function setup(cwd?: string, documentText = 'gateway retry evidence'): Pro
       }])
     }
   })
-  await ctx.plugin(MemoryService)
+  await ctx.plugin(MemoryService, config)
   return { ctx, agent, service: ctx.memory, disposeAgent: owned.dispose }
 }
 
@@ -115,6 +115,22 @@ describe('MemoryService', () => {
     disposeAgent()
     await expect(service.search(agent, { query: 'x', signal: new AbortController().signal }))
       .rejects.toMatchObject({ code: 'MEMORY_STALE_AGENT' })
+    await ctx.fiber.dispose()
+  })
+
+  it('serves enabled TencentDB and OpenViking stubs without session ids', async () => {
+    const { ctx, agent, service } = await setup('/workspace/stub', 'unused', { providers: ['local', 'tencentdb', 'openviking'] })
+    await expect(service.search(agent, { provider: 'tencentdb', query: 'retry', signal: new AbortController().signal }))
+      .resolves.toMatchObject({ provider: 'tencentdb', hits: [{ id: 'tencentdb:stub-chat-1', kind: 'memory', source: 'chat-memory' }] })
+    await expect(service.search(agent, { provider: 'openviking', depth: 'L1', query: 'retry', signal: new AbortController().signal }))
+      .resolves.toMatchObject({ provider: 'openviking', hits: [{ id: 'openviking:viking://stub/retry', title: 'Retry detail' }] })
+    await ctx.fiber.dispose()
+  })
+
+  it('requires explicit OpenViking depth', async () => {
+    const { ctx, agent, service } = await setup('/workspace/stub', 'unused', { providers: ['openviking'] })
+    await expect(service.search(agent, { provider: 'openviking', query: 'retry', signal: new AbortController().signal }))
+      .rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await ctx.fiber.dispose()
   })
 

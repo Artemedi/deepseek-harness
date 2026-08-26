@@ -8,7 +8,7 @@
 
 #### What the model sees
 
-The model sees the `memory_search` schema and a JSON result containing explicit workspace, session, event, and citation text. The session log records the exact result before a later step can reuse it.
+The model sees the `memory_search` schema with an explicit provider and optional OpenViking depth. Its JSON result contains provider, workspace, first-party session fields when available, remote source metadata when available, and exact citation text. The session log records the exact result before a later step can reuse it.
 
 #### Token effect
 
@@ -20,4 +20,4 @@ The tool definition remains prefix-stable while composition is unchanged. A new 
 
 ## Known Limitations and Deferred Work
 
-- **Explicit search only** — this consumer has no automatic recall, `memory_store`, TencentDB provider, or OpenViking provider.
+- **Explicit search only** — this consumer has no automatic recall or `memory_store`; TencentDB and OpenViking routes are deterministic local stubs until remote transport is separately implemented.
