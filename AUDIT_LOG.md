@@ -172,3 +172,10 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Persistence:** The assembled transcript records `tool-workflow/run-start`, two `tool-workflow/agent-*` pairs, `tool-workflow/run-end`, and separate owned child session logs. No second scheduler or hidden prompt state was introduced.
 - **Evidence:** Node 22 replay after refresh passed `1/1` for the new bounded workflow snapshot. The expected transcript is stored under `examples/headless-agent/tests/snapshots/bounded-workflow/stream-json.expected.jsonl`.
 - **Next action:** Apply the external Ruflo preflight plan to this composition and add provider conformance only when TencentDB/OpenViking retrieval APIs or credentials are available.
+
+## 2026-08-26: DSH workflow fixture committed locally
+
+- **DSH commit:** `b329e81c7f` (`test: add assembled bounded workflow snapshot`) contains the workflow fixture, deterministic adapter, and canonical replay transcript.
+- **Push result:** The configured HTTPS remote requested unavailable credentials; the available SSH deploy key was rejected for `deepseek-ai/deepseek-harness.git`.
+- **Decision:** Preserve the commit and worktree as-is. No force push, remote rewrite, or unrelated change was used to bypass repository authorization.
+- **Next action:** Publish `b329e81c7f` after an authorized DSH contributor credential is provided; continue external adapter work only with supplied API contracts or credentials.
