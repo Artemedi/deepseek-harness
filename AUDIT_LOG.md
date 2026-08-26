@@ -99,6 +99,15 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Durability:** `memory_search` must append a bounded `memory/search` event containing the exact cited text before a later model request can use it.
 - **Next action:** Add package manifests, aggregate references, service types, invariant, local provider, explicit tool consumer, and a composed keyless test in one implementation slice.
 
+## 2026-08-26: DSH-native experimental memory search slice
+
+- **Packages:** Added opt-in `@deepseek-ai/dsh-experimental-memory` and `@deepseek-ai/dsh-experimental-tool-memory`; neither is part of the default base bundle.
+- **Authority:** `ctx.memory.search()` requires the exact live Agent and derives scope from `Agent.session.header.cwd`. It searches only same-workspace `ctx.sessionQuery` records and rejects stale agents, missing workspaces, empty queries, and invalid bounds.
+- **Durability:** `memory_search` appends `memory/search` with the exact bounded citations before returning the equivalent model-visible JSON tool result. An invariant rejects a durable observation with a workspace different from its owning session.
+- **Evidence:** Local DSH commit `413915553f` (`feat: add experimental memory search seam`). Isolated Node 22 host artifact build, runtime closure, NodeNext consumer types, and package paths passed. Focused Vitest suites passed 6/6, including an actual Loader-composed `cordis.yml` tool execution; a real headless app-bin keyless snapshot verifies `memory/search` is logged before `tool/result` and reused by the following model step.
+- **Limit:** Search currently covers DSH session history only. No automatic prompt injection, store operation, TencentDB provider, OpenViking provider, or provider-failure normalization has been added.
+- **Next action:** Add an opt-in runnable composition/snapshot fixture, then evaluate TencentDB and OpenViking adapters against the same durable search observation rule.
+
 ## 2026-08-26: DSH P0 fix completed locally
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.
