@@ -18,3 +18,4 @@ integrations/tencentdb-agent-memory/runtime/
 integrations/tencentdb-agent-memory/.env
 *.log
 *.jsonl
+memory.jsonl

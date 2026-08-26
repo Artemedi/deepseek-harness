@@ -116,6 +116,10 @@ A later automatic injection plugin may use a prior durable `memory/search` event
 
 The first consumer derives `workspace` from the calling Agent's canonical `SessionHeader.cwd` and rejects a caller without a workspace. It never accepts a user-supplied workspace or owner id as authorization. A provider may further constrain individual resource ACLs, but it cannot widen a DSH caller from one workspace/team/agent/task scope to another. Workspace path canonicalization and session owner identity are owned by DSH, not provider-supplied strings.
 
+## Local Reference Provider
+
+[`integrations/local-memory.py`](../integrations/local-memory.py) is an executable reference provider for this contract. It persists explicit records in an untracked JSONL file, derives scope from a caller-owned workspace value, bounds stored content, and returns only matching workspace records. Its tests cover workspace isolation, byte limits, query validation, and result limits. It does not inject context or mount into DSH; the future DSH plugin remains responsible for Agent-derived scope and durable `memory/search` events.
+
 ## Verification
 
 - Unit tests cover request bounds, scope propagation, provider failures, and durable event shape.

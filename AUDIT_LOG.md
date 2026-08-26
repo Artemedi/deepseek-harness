@@ -84,6 +84,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Reason:** This follows the existing `session-query` authorization model and keeps provider strings from widening access outside DSH's workspace authority.
 - **Next action:** Implement the experimental local provider only after its domain records, byte bounds, and model-facing durable event payload are covered by tests.
 
+## 2026-08-26: Executable local memory reference provider
+
+- **Files:** `integrations/local-memory.py` and `integrations/test_local_memory.py`.
+- **Behavior:** Explicit JSONL records are scoped by workspace, storage is byte-bounded, literal search has a strict result cap, and the caller cannot retrieve records from another workspace.
+- **Evidence:** `python3 -m unittest integrations/test_local_memory.py` passed 4/4 tests. A CLI smoke wrote to `/project/a`, found it only under `/project/a`, and returned `[]` for `/project/b`.
+- **Limit:** The reference provider is not mounted in DSH and never injects prompt context. It is an executable provider conformance baseline; the DSH plugin must derive scope from `Agent.session.header.cwd` and append durable `memory/search` events.
+- **Next action:** Create the experimental DSH memory service/package skeleton and use these tests as provider-conformance fixtures.
+
 ## 2026-08-26: DSH P0 fix completed locally
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.
