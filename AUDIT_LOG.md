@@ -130,6 +130,12 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** New plan tests plus existing local-memory tests pass 8/8; the example CLI prints a valid bounded limits report; TencentDB runner syntax remains valid.
 - **Next action:** Use the validator as preflight for a keyless DSH workflow fixture with an explicit coordinator and review consumer; do not add a second Ruflo runtime.
 
+## 2026-08-26: validated DSH command bridge
+
+- **Artifact:** Extended `integrations/ruflo-dsh-plan.py` with an explicit `--execute -- <command>` bridge. It validates the full plan first, then runs only the operator-supplied DSH command and returns that command's exit status.
+- **Safety:** Plan task text is never converted into shell commands. Invalid DAGs, missing review, fan-out violations, cycles, and budget failures return before any subprocess starts. The bridge owns no DSH agent, job, workflow, session, or persistence state.
+- **Evidence:** Local provider and orchestration tests pass 9/9; valid CLI execution prints the bounded plan report and command output; invalid-plan test confirms the marker command is not started; `bash -n` and Python bytecode checks pass.
+
 ## 2026-08-26: DSH P0 fix completed locally
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.

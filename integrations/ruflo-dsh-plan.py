@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -100,6 +101,8 @@ def _assert_acyclic(graph: dict[str, list[str]]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", type=Path)
+    parser.add_argument("--execute", action="store_true", help="run the command after --")
+    parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     try:
         plan = json.loads(args.plan.read_text(encoding="utf-8"))
@@ -107,8 +110,18 @@ def main() -> int:
     except (OSError, json.JSONDecodeError, PlanError) as error:
         print(f"invalid DSH orchestration plan: {error}", file=sys.stderr)
         return 1
-    print(json.dumps({"status": "valid", "limits": limits.__dict__}, sort_keys=True))
-    return 0
+    command_args = args.command
+    execute = args.execute or command_args[:1] == ["--execute"]
+    if command_args[:1] == ["--execute"]:
+        command_args = command_args[1:]
+    if not execute:
+        print(json.dumps({"status": "valid", "limits": limits.__dict__}, sort_keys=True))
+        return 0
+    command = command_args[1:] if command_args[:1] == ["--"] else command_args
+    if not command:
+        print("--execute requires a command after --", file=sys.stderr)
+        return 2
+    return subprocess.run(command, check=False).returncode
 
 
 if __name__ == "__main__":

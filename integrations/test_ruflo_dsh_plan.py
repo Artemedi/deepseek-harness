@@ -1,6 +1,8 @@
 import importlib.util
 import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -39,6 +41,23 @@ class RufloDshPlanTests(unittest.TestCase):
         plan["tasks"][1]["dependsOn"] = ["a"]
         with self.assertRaisesRegex(MODULE.PlanError, "budget"):
             MODULE.validate_plan(plan)
+
+    def test_execute_runs_only_after_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "marker"
+            command = [sys.executable, "-c", f"from pathlib import Path; Path({str(marker)!r}).write_text('ran')"]
+            valid = subprocess.run([sys.executable, str(ROOT / "ruflo-dsh-plan.py"), str(ROOT / "ruflo-dsh-plan.example.json"), "--execute", "--", *command], check=False)
+            self.assertEqual(valid.returncode, 0)
+            self.assertEqual(marker.read_text(encoding="utf-8"), "ran")
+
+            invalid = dict(VALID)
+            invalid["tasks"] = [{"id": "worker", "cost": 1}]
+            plan_path = Path(directory) / "invalid.json"
+            plan_path.write_text(json.dumps(invalid), encoding="utf-8")
+            marker.unlink()
+            rejected = subprocess.run([sys.executable, str(ROOT / "ruflo-dsh-plan.py"), str(plan_path), "--execute", "--", *command], check=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertFalse(marker.exists())
 
     def test_requires_exactly_one_review(self):
         plan = {"limits": {"maxFanOut": 2, "maxTasks": 4, "budget": 1}, "tasks": [{"id": "a", "cost": 1}]}
