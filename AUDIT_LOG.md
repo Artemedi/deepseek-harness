@@ -235,6 +235,13 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Published audit:** Harness commit `c6a3c8c` records the result and is synchronized with `origin/main`.
 - **Next action:** Continue local conformance work and publish DSH commits once repository authorization is available.
 
+## 2026-08-26: Strict TencentDB image digest validation
+
+- **Change:** The deployment runner now requires each image reference to end in exactly 64 hexadecimal characters after `@sha256:`; malformed and short digests fail validation before Podman operations.
+- **Evidence:** Digest regression covers pinned success, mutable tags, and short digests. `bash -n` passes; probe, local-memory, and Ruflo tests pass `15/15`.
+- **Documentation:** TencentDB README now states the exact immutable digest requirement.
+- **Next action:** Treat any digest change as a reviewed deployment update and rerun the complete probe against supplied credentials.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.

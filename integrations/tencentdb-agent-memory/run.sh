@@ -33,7 +33,7 @@ require_var() {
 require_digest() {
   local name="$1" value="${!1:-}"
   require_var "$name" || return 1
-  [[ "$value" == *@sha256:* ]] || { echo "$name must pin an immutable @sha256 digest" >&2; return 1; }
+  [[ "$value" =~ @sha256:[0-9a-fA-F]{64}$ ]] || { echo "$name must pin an immutable 64-hex @sha256 digest" >&2; return 1; }
 }
 
 validate() {

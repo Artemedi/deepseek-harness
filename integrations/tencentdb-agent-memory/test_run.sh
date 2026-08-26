@@ -22,11 +22,17 @@ output="$(ENV_FILE="$TMP/pinned.env" PODMAN=true "$RUNNER" validate)"
 [[ "$output" == *"digest-pinned"* ]]
 [[ "$output" != *"test-memory-key"* && "$output" != *"test-upstream-key"* ]]
 
-sed 's#@sha256:[a-z]*#:#' "$TMP/pinned.env" > "$TMP/tag.env"
+sed 's#@sha256:[a-f]*#:#' "$TMP/pinned.env" > "$TMP/tag.env"
 if ENV_FILE="$TMP/tag.env" PODMAN=true "$RUNNER" validate >"$TMP/out" 2>&1; then
   echo "mutable image tag was accepted" >&2
   exit 1
 fi
-grep -q 'immutable @sha256 digest' "$TMP/out"
+grep -q '64-hex @sha256 digest' "$TMP/out"
+
+sed 's#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#short#' "$TMP/pinned.env" > "$TMP/short.env"
+if ENV_FILE="$TMP/short.env" PODMAN=true "$RUNNER" validate >"$TMP/out" 2>&1; then
+  echo "short image digest was accepted" >&2
+  exit 1
+fi
 
 echo "runner digest validation passed"
