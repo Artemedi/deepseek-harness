@@ -179,3 +179,10 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Push result:** The configured HTTPS remote requested unavailable credentials; the available SSH deploy key was rejected for `deepseek-ai/deepseek-harness.git`.
 - **Decision:** Preserve the commit and worktree as-is. No force push, remote rewrite, or unrelated change was used to bypass repository authorization.
 - **Next action:** Publish `b329e81c7f` after an authorized DSH contributor credential is provided; continue external adapter work only with supplied API contracts or credentials.
+
+## 2026-08-26: Workflow result propagation regression fixed
+
+- **Finding:** The first assembled workflow snapshot proved child lifecycle events but the deterministic parent adapter only inspected text blocks, so the final coordinator response omitted the workflow tool result.
+- **Fix:** The keyless adapter now reads bounded text from the terminal `tool-result` content and returns it in the coordinator response. Production workflow and persistence code are unchanged.
+- **Evidence:** Node 22 refresh and replay both passed `1/1`; Harness orchestration and local-memory tests passed `9/9`.
+- **Next action:** Keep the workflow fixture as the keyless Ruflo-pattern evidence while external provider adapters remain gated on supplied API contracts and credentials.
