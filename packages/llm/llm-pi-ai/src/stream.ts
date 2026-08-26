@@ -90,12 +90,13 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     && isContextWindowExceededError(message.errorMessage)
   if (piAiOverflow || harnessOverflow) {
     const text = message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`
+    const status = httpStatusOf(text)
     return {
       kind: 'error',
       failure: {
         message: text,
         code: CONTEXT_WINDOW_EXCEEDED_CODE,
-        ...httpStatusOf(text) === undefined ? {} : { status: httpStatusOf(text) },
+        ...(status === undefined ? {} : { status }),
       },
     }
   }
@@ -122,12 +123,13 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
+      const status = httpStatusOf(text)
       return {
         kind: 'error',
         failure: {
           message: text,
           code: classifyPiAiError(text),
-          ...httpStatusOf(text) === undefined ? {} : { status: httpStatusOf(text) },
+          ...(status === undefined ? {} : { status }),
         },
       }
     }

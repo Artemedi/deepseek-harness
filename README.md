@@ -36,6 +36,21 @@ pnpm dsh web
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
 
+### Update and restart a systemd user service
+
+If Harness runs as `dsh-web.service`, update it from the repository root:
+
+```sh
+cd /var/home/Trintos/projects/deepseek-harness
+pnpm install --frozen-lockfile
+pnpm run build
+systemctl --user restart dsh-web.service
+systemctl --user --no-pager --full status dsh-web.service
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3081/
+```
+
+The service must report `active (running)` and the HTTP check must return `200`. Refresh the existing `http://127.0.0.1:3081` page with `Ctrl+Shift+R`. Do not start a separate Vite server for the complete Web UI. Before updating, back up `~/.dsh`, which contains sessions and settings; if the build fails, do not restart the service.
+
 ## Community and support
 
 - Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).

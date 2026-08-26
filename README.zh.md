@@ -40,6 +40,21 @@ pnpm dsh web
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
 
+### 更新并重启 systemd 用户服务
+
+如果 Harness 由 `dsh-web.service` 运行，请在仓库根目录执行：
+
+```sh
+cd /var/home/Trintos/projects/deepseek-harness
+pnpm install --frozen-lockfile
+pnpm run build
+systemctl --user restart dsh-web.service
+systemctl --user --no-pager --full status dsh-web.service
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3081/
+```
+
+服务状态应为 `active (running)`，HTTP 检查应返回 `200`。然后在已有的 `http://127.0.0.1:3081` 页面使用 `Ctrl+Shift+R` 强制刷新。不要为完整 Web UI 启动独立的 Vite 服务器。更新前请备份包含会话和设置的 `~/.dsh`；如果构建失败，不要重启服务。
+
 ## 社区与支持
 
 - 欢迎通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
