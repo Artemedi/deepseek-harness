@@ -30,13 +30,22 @@ require_var() {
   [[ -n "$value" && "$value" != "REPLACE_ME" ]] || { echo "Missing required $name in $ENV_FILE" >&2; return 1; }
 }
 
+require_digest() {
+  local name="$1" value="${!1:-}"
+  require_var "$name" || return 1
+  [[ "$value" == *@sha256:* ]] || { echo "$name must pin an immutable @sha256 digest" >&2; return 1; }
+}
+
 validate() {
   local missing=0
   for name in MEMORY_LLM_BASE_URL MEMORY_LLM_API_KEY MEMORY_LLM_MODEL PROXY_UPSTREAM_URL PROXY_UPSTREAM_API_KEY PROXY_UPSTREAM_MODEL; do
     require_var "$name" || missing=1
   done
+  for name in TDAI_CORE_IMAGE TDAI_HUB_IMAGE TDAI_PROXY_IMAGE; do
+    require_digest "$name" || missing=1
+  done
   [[ "$missing" == 0 ]] || return 1
-  echo "TencentDB configuration is complete. No credentials were printed."
+  echo "TencentDB configuration is complete. Images are digest-pinned; no credentials were printed."
 }
 
 ensure_network() {

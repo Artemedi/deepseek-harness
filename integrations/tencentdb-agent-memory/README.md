@@ -12,7 +12,7 @@ $EDITOR .env
 ./run.sh start
 ```
 
-`validate` refuses missing or placeholder LLM settings and prints no secret values. `start` pulls the three TencentDB images, starts memory core, memory hub, and proxy, then waits for each HTTP endpoint. Runtime configs are generated under `runtime/`, which is ignored by Git and created with owner-only permissions.
+`validate` refuses missing or placeholder LLM settings, requires all three images to use immutable `@sha256:` digests, and prints no secret values. `start` pulls the three TencentDB images, starts memory core, memory hub, and proxy, then waits for each HTTP endpoint. Runtime configs are generated under `runtime/`, which is ignored by Git and created with owner-only permissions.
 
 The local proxy route is:
 

@@ -235,6 +235,14 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Published audit:** Harness commit `c6a3c8c` records the result and is synchronized with `origin/main`.
 - **Next action:** Continue local conformance work and publish DSH commits once repository authorization is available.
 
+## 2026-08-26: TencentDB deployment digest gate
+
+- **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
+- **Reason:** A reviewed deployment must not silently resolve mutable `latest` or tag references after image digests were pinned.
+- **Evidence:** The runner regression passes for digest-pinned images, rejects mutable tags before any container operation, and confirms test credentials are absent from output. `bash -n` passes; Harness integration tests pass `11/11`.
+- **Documentation:** Updated the TencentDB setup README with the immutable-image requirement.
+- **Next action:** Pin and review any future upstream image update as an explicit audit entry before changing `.env.example`.
+
 ## 2026-08-26: Local memory malformed-record failures
 
 - **Change:** The provider-neutral JSONL reference provider now converts malformed JSON and structurally incomplete persisted records into explicit `MemoryError` failures.
