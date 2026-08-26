@@ -305,6 +305,11 @@ Append-only operational record for the Harness Integrations project. Each entry 
 - **Evidence:** Memory, remote contract, invariant, and Loader composition tests pass `15/15`; memory and tool-memory TypeScript checks pass after building memory declarations.
 - **Scope:** Providers are deterministic local stubs only. No external repository was changed, no network call or credential is used, and DSH session persistence remains authoritative.
 
+## 2026-08-28: Full integration report
+
+- **Artifact:** Added `FINAL_INTEGRATION_REPORT.md`, a plain-language Markdown report covering the integration decisions, changed components, security and replay guarantees, verification evidence, benefits, limitations, and next steps.
+- **Audience:** The report is written for review without requiring familiarity with the internal implementation and distinguishes completed local stub behavior from deferred live-provider work.
+
 ## 2026-08-26: TencentDB deployment digest gate
 
 - **Change:** The Podman runner now requires `TDAI_CORE_IMAGE`, `TDAI_HUB_IMAGE`, and `TDAI_PROXY_IMAGE` to use immutable `@sha256:` references before validation or startup proceeds.
