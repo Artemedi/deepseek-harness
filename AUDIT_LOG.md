@@ -82,6 +82,6 @@ Append-only operational record for the Harness Integrations project. Each entry 
 
 - **DSH commit:** `2c902ca6aa` (`fix: retry flattened upstream gateway errors`). This commit remains in the DSH checkout and was not pushed to the upstream DSH remote.
 - **Behavior:** The exact flattened pi-ai message `Upstream error.` maps to `SERVER`, activating the existing bounded retry policy. Other unknown pi-ai messages remain `PI_AI_ERROR`.
-- **Evidence:** Isolated Node 22 workspace test passed `packages/llm/llm-pi-ai/tests/convert.spec.ts`: 72/72 tests.
+- **Evidence:** In isolated Node 22 workspaces, `packages/llm/llm-pi-ai/tests/convert.spec.ts` passed 72/72 tests and `packages/llm/llm-retry/tests/transport-recovery.spec.ts` passed 7/7 tests. The latter confirms the existing bounded retry lifecycle consumes the resulting `SERVER` failure.
 - **Environment limitation:** DSH pre-commit hooks requiring `node` could not run on the host, so the commit used `LEFTHOOK=0` after staged whitespace validation. The Node 22 focused test is the recorded behavior evidence.
 - **Next action:** Add the assembled retry/Web regression and preserve status/request-id facts at the adapter boundary where the upstream library still permits it.
