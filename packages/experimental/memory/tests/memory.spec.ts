@@ -117,4 +117,13 @@ describe('MemoryService', () => {
       .rejects.toMatchObject({ code: 'MEMORY_STALE_AGENT' })
     await ctx.fiber.dispose()
   })
+
+  it('stops before querying when the request is already cancelled', async () => {
+    const { ctx, agent, service } = await setup('/workspace/a')
+    const controller = new AbortController()
+    controller.abort(new Error('cancelled'))
+    await expect(service.search(agent, { query: 'x', signal: controller.signal }))
+      .rejects.toThrow('cancelled')
+    await ctx.fiber.dispose()
+  })
 })

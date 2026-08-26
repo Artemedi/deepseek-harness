@@ -80,6 +80,7 @@ export default class MemoryService extends Service {
     if (!Number.isSafeInteger(maxContentBytes) || maxContentBytes < 1 || maxContentBytes > MAX_MEMORY_CONTENT_BYTES) {
       throw new HarnessError(`memory search maxContentBytes must be an integer from 1 through ${MAX_MEMORY_CONTENT_BYTES}`, 'MEMORY_INVALID_REQUEST')
     }
+    if (request.signal.aborted) throw request.signal.reason
 
     const records = await this.ctx.sessionQuery.filterSessions([{ kind: 'cwd', values: [workspace] }], request.signal)
     const hits = await this.collect(records, query, limit, maxContentBytes, request.signal)
