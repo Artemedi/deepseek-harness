@@ -367,6 +367,21 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/chat/completions'])
   })
 
+  it('classifies a flattened gateway upstream envelope as a retryable server failure', async () => {
+    const server = await mockServer([{
+      status: 502,
+      body: JSON.stringify({ error: { type: 'api_error', message: 'Upstream error.' } }),
+      headers: { 'x-request-id': 'gateway-request-0001' },
+    }])
+    const ctx = await harness(server.url)
+    const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: { message: expect.stringContaining('Upstream error.'), code: 'SERVER' },
+    })
+    expect(server.paths).toEqual(['/chat/completions'])
+  })
+
   it('uses the resolved catalog context window for usage-based overflow detection', async () => {
     const model = getBuiltinModels('deepseek').find(candidate => candidate.id === 'deepseek-v4-flash')
     if (model === undefined) throw new Error('deepseek-v4-flash missing from pi-ai test catalog')
