@@ -87,6 +87,7 @@
     "@deepseek-ai/dsh-experimental-tool-memory": "workspace:*",
     "@deepseek-ai/dsh-experimental-verifier": "workspace:*",
     "@deepseek-ai/dsh-experimental-tool-verifier": "workspace:*",
+    "@deepseek-ai/dsh-experimental-verifier-bundle": "workspace:*",
     "@deepseek-ai/dsh-time-context": "workspace:*",
     "@deepseek-ai/dsh-tool-call-timeout-policy": "workspace:*",
     "@deepseek-ai/dsh-token-meter": "workspace:*",

@@ -110,6 +110,7 @@
       "@deepseek-ai/dsh-experimental-verifier/invariant": ["./packages/experimental/verifier/src/invariant.ts"],
       "@deepseek-ai/dsh-experimental-tool-verifier": ["./packages/experimental/tool-verifier/src/index.ts"],
       "@deepseek-ai/dsh-experimental-tool-verifier/invariant": ["./packages/experimental/tool-verifier/src/invariant.ts"],
+      "@deepseek-ai/dsh-experimental-verifier-bundle/invariant": ["./packages/bundle/experimental-verifier/src/invariant.ts"],
       "@deepseek-ai/dsh-*/invariant": [
         "./packages/core/*/src/invariant.ts",
         "./packages/prompt/*/src/invariant.ts",
