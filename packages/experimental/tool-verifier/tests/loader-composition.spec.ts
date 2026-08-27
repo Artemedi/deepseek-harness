@@ -7,9 +7,9 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import CredentialsLocal from '@deepseek-ai/dsh-credentials-local'
-import VerifierService from '@deepseek-ai/dsh-experimental-verifier'
+import VerifierService from '../../verifier/src/index.ts'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import * as ToolVerifier from '@deepseek-ai/dsh-experimental-tool-verifier'
+import * as ToolVerifier from '../src/index.ts'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 
 let root: string | undefined
@@ -39,7 +39,8 @@ describe('experimental verifier real Loader composition', () => {
     const ctx = new Context()
     context = ctx
     ctx.baseUrl = pathToFileURL(root).href + '/'
-    await ctx.plugin(Loader)
+    const loader = ctx.plugin(Loader)
+    await loader.await()
     ctx.loader.builtins.include = Include
     const modules = new Map<string, unknown>([
       ['@deepseek-ai/dsh-credentials-local', CredentialsLocal],
@@ -55,6 +56,6 @@ describe('experimental verifier real Loader composition', () => {
     } } as unknown as NonNullable<typeof ctx.loader.internal>
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
     await ctx.loader.await()
-    expect(ctx.tools.schemas().find(tool => tool.name === 'verify_pair')).toMatchObject({ name: 'verify_pair' })
+    expect(ctx.get('tools')?.schemas().find(tool => tool.name === 'verify_pair')).toMatchObject({ name: 'verify_pair' })
   })
 })

@@ -4,8 +4,8 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
-import VerifierService from '@deepseek-ai/dsh-experimental-verifier'
-import * as ToolVerifier from '@deepseek-ai/dsh-experimental-tool-verifier'
+import VerifierService from '../../verifier/src/index.ts'
+import * as ToolVerifier from '../src/index.ts'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 
 let ctx: Context | undefined

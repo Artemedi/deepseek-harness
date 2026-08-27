@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
-import VerifierService from '@deepseek-ai/dsh-experimental-verifier'
+import VerifierService from '../src/index.ts'
 
 const response = (value: unknown, status = 200): Response => new Response(JSON.stringify({
   choices: [{ message: { content: JSON.stringify(value) } }],
@@ -10,10 +10,13 @@ const response = (value: unknown, status = 200): Response => new Response(JSON.s
 
 async function setup(seed: Record<string, string> = { MISTRAL_API_KEY: 'test-key' }): Promise<{ ctx: Context; service: VerifierService }> {
   const ctx = new Context()
-  await ctx.plugin(AgentRegistry)
-  await ctx.plugin(MemoryCredentials, seed)
-  await ctx.plugin(VerifierService)
-  return { ctx, service: ctx.verifier }
+  const agents = ctx.plugin(AgentRegistry)
+  await agents.await()
+  const credentials = ctx.plugin(MemoryCredentials, seed)
+  await credentials.await()
+  const verifier = ctx.plugin(VerifierService)
+  await verifier.await()
+  return { ctx, service: ctx.get('verifier')! }
 }
 
 const request = (overrides: Partial<Parameters<VerifierService['compare']>[0]> = {}) => ({
