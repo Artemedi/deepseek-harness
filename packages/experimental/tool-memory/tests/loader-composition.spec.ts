@@ -10,6 +10,7 @@ import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import type { SessionEventSearchDocument, SessionRecord } from '@deepseek-ai/dsh-session-query'
@@ -72,6 +73,8 @@ async function boot(): Promise<Context> {
     "- name: 'test-query'",
     "- name: '@deepseek-ai/dsh-experimental-memory'",
     "  config: { providers: ['local', 'tencentdb', 'openviking'] }",
+    "- name: '@deepseek-ai/dsh-session-persistence-jsonl'",
+    `  config: { root: ${JSON.stringify(join(root, 'sessions'))}, compression: none }`,
     "- name: '@deepseek-ai/dsh-tools'",
     "- name: '@deepseek-ai/dsh-experimental-tool-memory'",
     '',
@@ -87,6 +90,7 @@ async function boot(): Promise<Context> {
     ['@deepseek-ai/dsh-system-prompt', SystemPrompt],
     ['test-query', TestQuery],
     ['@deepseek-ai/dsh-experimental-memory', MemoryService],
+    ['@deepseek-ai/dsh-session-persistence-jsonl', JsonlSessionPersistence],
     ['@deepseek-ai/dsh-tools', ToolRuntime],
     ['@deepseek-ai/dsh-experimental-tool-memory', ToolMemory],
   ])
@@ -136,5 +140,12 @@ describe('experimental memory real Loader composition', () => {
     expect(viking.isError).toBe(false)
     expect(viking.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('openviking:viking://stub/retry') })
     expect(owner.session.events.filter(event => event.type === 'memory/search')).toHaveLength(3)
+    const memoryEvent = owner.session.events.find(event => event.type === 'memory/search')
+    expect(memoryEvent).toBeDefined()
+    await ctx.sessionPersistence.create(owner.session.header)
+    await ctx.sessionPersistence.append(owner.session.id, owner.session.events)
+    const loaded = await ctx.sessionPersistence.load(owner.session.id)
+    expect(loaded.events.find(event => event.type === 'memory/search')?.data).toEqual(memoryEvent!.data)
+    expect(loaded.events.filter(event => event.type === 'memory/search')).toHaveLength(3)
   }, 30_000)
 })
