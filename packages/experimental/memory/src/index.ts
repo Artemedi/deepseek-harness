@@ -29,7 +29,7 @@ class StubTencentDbProvider implements MemoryProvider {
   readonly id = 'tencentdb'
 
   search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
-    return normalizeTencentDbRecords(TENCENTDB_STUB_RECORDS, request)
+    return Promise.resolve(normalizeTencentDbRecords(TENCENTDB_STUB_RECORDS, request))
   }
 }
 
@@ -37,7 +37,7 @@ class StubOpenVikingProvider implements MemoryProvider {
   readonly id = 'openviking'
 
   search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
-    return normalizeOpenVikingRecords(OPENVIKING_STUB_RECORDS, request.depth, request)
+    return Promise.resolve(normalizeOpenVikingRecords(OPENVIKING_STUB_RECORDS, request.depth, request))
   }
 }
 
