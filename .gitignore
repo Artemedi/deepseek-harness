@@ -39,3 +39,5 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+# Local convenience notes (not part of the repository)
+LOCAL-SETUP.md

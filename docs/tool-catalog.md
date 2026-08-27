@@ -32,7 +32,8 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@deepseek-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@deepseek-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@deepseek-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
-| `@deepseek-ai/dsh-experimental-tool-memory` | `memory_search` | `ctx.tools`, `ctx.memory`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `memory/search exact bounded citations`, `tool/result` | - | Opt-in experimental retrieval over same-workspace session history. The tool records the exact bounded citations in memory/search before returning its JSON result; TencentDB and OpenViking providers are deferred. |
+| `@deepseek-ai/dsh-experimental-tool-memory` | `memory_search` | `ctx.tools`, `ctx.memory`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `memory/search exact bounded citations`, `tool/result` | - | Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval is available only with explicit provider configuration, while OpenViking HTTP retrieval remains deferred. |
+| `@deepseek-ai/dsh-experimental-tool-verifier` | `verify_pair` | `ctx.tools`, `ctx.verifier` | `tool/call`, `tool/result` | - | Opt-in pairwise evidence comparison through the native JSON verifier. The score is probabilistic preference only and never a correctness proof or goal-completion authority. |
 | `@deepseek-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@deepseek-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered tool name is the load-time `toolName` config (default `subagent`); the schema above is that default. The shipped compositions load this package once per subagent backend, so the model additionally sees `subagent_fork` bound to the fork backend. Each instance's description, `run_in_background` parameter, and system-prompt policy follow its own `backgroundMode` and `enableRunInBackground`, so the two shipped schemas are not identical: `subagent` is `continuable` and defaults omitted calls to background with automatic settlement delivery, while `subagent_fork` stays `one-shot` and defaults them to foreground — see `packages/bundle/base/cordis.patch.yml` and `examples/acp-agent/cordis.yml`. |
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
@@ -1286,6 +1287,14 @@ Search prior workspace session history for explicit, cited memory. Results are r
     "max_content_bytes": {
       "type": "integer",
       "description": "Maximum UTF-8 bytes across returned citation text."
+    },
+    "provider": {
+      "type": "string",
+      "description": "Explicit provider: local, tencentdb, or openviking."
+    },
+    "depth": {
+      "type": "string",
+      "description": "Required for openviking: L0, L1, or L2."
     }
   },
   "required": [
@@ -1296,7 +1305,54 @@ Search prior workspace session history for explicit, cited memory. Results are r
 
 Source: [`packages/experimental/tool-memory/src/index.ts`](../packages/experimental/tool-memory/src/index.ts)
 
-Opt-in experimental retrieval over same-workspace session history. The tool records the exact bounded citations in memory/search before returning its JSON result; TencentDB and OpenViking providers are deferred.
+Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval is available only with explicit provider configuration, while OpenViking HTTP retrieval remains deferred.
+
+<a id="deepseek-aidsh-experimental-tool-verifier"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-verifier`
+
+### `verify_pair`
+
+Compare two candidate evidence records against an explicit rubric through the opt-in JSON verifier. Use only after deterministic checks; a score is not correctness proof.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "rubric": {
+      "type": "string",
+      "description": "Concrete criteria used for the comparison."
+    },
+    "left_id": {
+      "type": "string",
+      "description": "Stable id of the left candidate."
+    },
+    "left_evidence": {
+      "type": "string",
+      "description": "Bounded deterministic evidence for the left candidate."
+    },
+    "right_id": {
+      "type": "string",
+      "description": "Stable id of the right candidate."
+    },
+    "right_evidence": {
+      "type": "string",
+      "description": "Bounded deterministic evidence for the right candidate."
+    }
+  },
+  "required": [
+    "rubric",
+    "left_id",
+    "left_evidence",
+    "right_id",
+    "right_evidence"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-verifier/src/index.ts`](../packages/experimental/tool-verifier/src/index.ts)
+
+Opt-in pairwise evidence comparison through the native JSON verifier. The score is probabilistic preference only and never a correctness proof or goal-completion authority.
 
 <a id="deepseek-aidsh-tool-session-query"></a>
 

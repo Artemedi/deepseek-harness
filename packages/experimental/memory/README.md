@@ -4,6 +4,10 @@
 
 The service accepts an exact live `Agent`, derives the workspace from `agent.session.header.cwd`, validates request bounds, and delegates retrieval to a provider-neutral search interface. The shipped `local` provider reads bounded citations from same-workspace session events and is mandatory in the configured provider set. Provider configuration is resolved at load time: empty, duplicate, unknown, or missing-`local` routes fail before any search runs. The service does not store provider state, inject prompt content, or replace session persistence. The `memory/search` event records the exact normalized query and citations before a consumer gives them to a later model request.
 
+TencentDB can be enabled explicitly with `providers: ['local', 'tencentdb']` and a `tencentdb` object containing `baseUrl` and a credential-store `credentialRef`. The native route calls `POST /v3/atomic/search`, applies timeout, response-size, cancellation, redirect, and typed HTTP failure handling, and remains disabled unless its configuration is present. Without that object, the `tencentdb` route is a deterministic test stub. Endpoint and credential changes require reloading the composition.
+
+OpenViking can be enabled explicitly with `providers: ['local', 'openviking']` and an `openviking` object containing `baseUrl`, optional `credentialRef`, and optional trusted `targetUri`. The native route calls the confirmed `POST /api/v1/search/find` endpoint with `query`, `limit`, and the configured target URI. It maps `result.memories`, `result.resources`, and `result.skills` records into opaque citations and applies the DSH-selected `L0`, `L1`, or `L2` depth, bounds, timeout, cancellation, redirect rejection, and typed failures. Without that object, the route is a deterministic local stub. The adapter does not use session context or implicit prompt injection.
+
 ## Model Experience
 
 ### Service output
@@ -22,7 +26,8 @@ The service does not add model context unless a consumer explicitly records and 
 
 ## Known Limitations and Deferred Work
 
-- **Session-history provider only** — TencentDB Agent Memory, OpenViking retrieval depths, memory storage, and automatic extraction require separate providers and consumers.
-- **External API references only** — TencentDB MemoryCore documentation ([README](https://github.com/TencentCloud/TencentDB-Agent-Memory/blob/feat/server_team/MemoryCore/README.md)) and OpenViking retrieval/context-layer documentation ([retrieval](https://docs.openviking.ai/en/concepts/07-retrieval), [L0/L1/L2](https://github.com/volcengine/OpenViking/blob/main/docs/en/concepts/03-context-layers.md)) are read-only design inputs. They are not runtime dependencies, and this package makes no network call or provider credential request.
-- **Stub adapter contract** — `src/remote-contract.ts` contains pure response normalizers for workspace-filtered TencentDB records and explicit OpenViking `L0`/`L1`/`L2` records. The service can opt into deterministic local `tencentdb` and `openviking` stubs through `providers`; these stubs never make network calls or request credentials.
-- **Remote durable fields** — Remote hits omit DSH session ids and event sequences because they are not first-party session records. They retain provider id, opaque source, kind, title, and exact bounded content in `memory/search`.
+- **Explicit search only** — memory storage, automatic extraction, and hidden prompt-time recall remain deferred. The `memory_search` consumer is the only model-facing memory operation.
+- **Opt-in remote routes** — TencentDB and OpenViking HTTP providers are selected only by explicit provider configuration; omitted configuration keeps deterministic local stubs and the default DSH/Web composition unchanged.
+- **OpenViking scope** — the native route uses the confirmed `/api/v1/search/find` envelope and a trusted deployment `targetUri`; it does not infer tenant authorization from DSH filesystem paths or provider response fields. The deployment must provide an isolated target URI when multi-tenant scope matters.
+- **Live deployment** — wire behavior is covered by mocked-fetch tests, but this checkout has no verified live TencentDB/OpenViking endpoint and credentials. Live smoke testing remains an operator task.
+- **Remote durable fields** — remote hits omit DSH session ids and event sequences because they are not first-party session records. They retain provider id, opaque source, kind, title, and exact bounded content in `memory/search`.
