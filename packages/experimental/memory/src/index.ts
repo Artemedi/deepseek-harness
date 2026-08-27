@@ -6,10 +6,14 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import type { MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
 import { normalizeOpenVikingRecords, normalizeTencentDbRecords, OPENVIKING_STUB_RECORDS, TENCENTDB_STUB_RECORDS } from './remote-contract.ts'
+import TencentDbHttpProvider, { type TencentDbHttpConfig } from './tencentdb-http.ts'
+import OpenVikingHttpProvider, { type OpenVikingHttpConfig } from './openviking-http.ts'
 
 function MemoryId(id: string): MemoryId {
   return id as MemoryId
@@ -18,6 +22,10 @@ function MemoryId(id: string): MemoryId {
 export type * from './types.ts'
 export { normalizeOpenVikingRecords, normalizeTencentDbRecords, remoteFailure } from './remote-contract.ts'
 export type { OpenVikingDepth, OpenVikingRecord, RemoteMemoryCitation, RemoteMemoryProvider, RemoteMemorySearchRequest, TencentDbRecord } from './remote-contract.ts'
+export { default as TencentDbHttpProvider } from './tencentdb-http.ts'
+export type { TencentDbHttpConfig } from './tencentdb-http.ts'
+export { default as OpenVikingHttpProvider } from './openviking-http.ts'
+export type { OpenVikingHttpConfig } from './openviking-http.ts'
 
 /** Maximum citations one request can return. */
 export const MAX_MEMORY_HITS = 20
@@ -75,13 +83,31 @@ export interface Config {
   readonly defaultMaxContentBytes?: number
   /** Explicitly enabled provider routes; `local` must be included. */
   readonly providers?: string[]
+  /** Explicit TencentDB HTTP provider configuration. */
+  readonly tencentdb?: TencentDbHttpConfig
+  /** Explicit OpenViking HTTP provider configuration. */
+  readonly openviking?: OpenVikingHttpConfig
 }
 
-/** Loader configuration for the experimental local provider. */
+/** Loader configuration for the experimental memory providers. */
 export const Config: z<Config> = z.object({
   defaultLimit: z.number().step(1).min(1).max(MAX_MEMORY_HITS).default(5),
   defaultMaxContentBytes: z.number().step(1).min(1).max(MAX_MEMORY_CONTENT_BYTES).default(8_192),
   providers: z.array(z.string()).default(['local']),
+  tencentdb: z.object({
+    baseUrl: z.string(),
+    credentialRef: z.string(),
+    authHeader: z.string().default('Authorization'),
+    timeoutMs: z.number().step(1).min(1).max(300_000).default(30_000),
+    maxResponseBytes: z.number().step(1).min(1).max(16_777_216).default(1_048_576),
+  }).required(false),
+  openviking: z.object({
+    baseUrl: z.string(),
+    credentialRef: z.string().required(false),
+    timeoutMs: z.number().step(1).min(1).max(300_000).default(30_000),
+    maxResponseBytes: z.number().step(1).min(1).max(16_777_216).default(1_048_576),
+    targetUri: z.string().required(false),
+  }).required(false),
 })
 
 declare module '@deepseek-ai/cordis' {
@@ -94,7 +120,13 @@ declare module '@deepseek-ai/cordis' {
 export default class MemoryService extends Service {
   static inject = ['agents', 'sessionQuery']
 
-  private readonly config: Required<Config>
+  private readonly config: {
+    readonly defaultLimit: number
+    readonly defaultMaxContentBytes: number
+    readonly providers: string[]
+    readonly tencentdb?: TencentDbHttpConfig
+    readonly openviking?: OpenVikingHttpConfig
+  }
   private readonly providers: Map<string, MemoryProvider>
 
   /** @param ctx - owning Cordis context. @param config - retrieval caps. */
@@ -104,11 +136,23 @@ export default class MemoryService extends Service {
       defaultLimit: config.defaultLimit ?? 5,
       defaultMaxContentBytes: config.defaultMaxContentBytes ?? 8_192,
       providers: config.providers ?? ['local'],
+      ...(config.tencentdb === undefined ? {} : { tencentdb: config.tencentdb }),
+      ...(config.openviking === undefined ? {} : { openviking: config.openviking }),
     }
     const available = new Map<string, MemoryProvider>([
       ['local', new LocalSessionMemoryProvider(ctx.sessionQuery)],
-      ['tencentdb', new StubTencentDbProvider()],
-      ['openviking', new StubOpenVikingProvider()],
+      ['tencentdb', this.config.tencentdb === undefined
+        ? new StubTencentDbProvider()
+        : new TencentDbHttpProvider(this.config.tencentdb, async ref => {
+          const credentials = ctx.get('credentials') as CredentialProvider | undefined
+          return (await credentials?.resolve(credentialRef(ref)))?.value
+        })],
+      ['openviking', this.config.openviking === undefined
+        ? new StubOpenVikingProvider()
+        : new OpenVikingHttpProvider(this.config.openviking, async ref => {
+          const credentials = ctx.get('credentials') as CredentialProvider | undefined
+          return (await credentials?.resolve(credentialRef(ref)))?.value
+        })],
     ])
     const providers = new Map<string, MemoryProvider>()
     for (const id of this.config.providers) {

@@ -62,6 +62,9 @@ import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import MemoryService from '@deepseek-ai/dsh-experimental-memory'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import * as ToolMemory from '@deepseek-ai/dsh-experimental-tool-memory'
+import VerifierService from '@deepseek-ai/dsh-experimental-verifier'
+import * as ToolVerifier from '@deepseek-ai/dsh-experimental-tool-verifier'
+import { MemoryCredentials } from '../packages/credentials/credentials/tests/memory.ts'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
@@ -454,7 +457,21 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolMemory)
     },
     note:
-      'Opt-in experimental retrieval over same-workspace session history. The tool records the exact bounded citations in memory/search before returning its JSON result; TencentDB and OpenViking providers are deferred.',
+      'Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval is available only with explicit provider configuration, while OpenViking HTTP retrieval remains deferred.'
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-verifier',
+    dir: 'tool-verifier',
+    source: 'packages/experimental/tool-verifier/src/index.ts',
+    requires: ['ctx.tools', 'ctx.verifier'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(MemoryCredentials, { MISTRAL_API_KEY: 'catalog-placeholder' })
+      await ctx.plugin(VerifierService, { baseUrl: 'https://verifier.invalid' })
+      await ctx.plugin(ToolVerifier)
+    },
+    note:
+      'Opt-in pairwise evidence comparison through the native JSON verifier. The score is probabilistic preference only and never a correctness proof or goal-completion authority.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-session-query',
