@@ -68,14 +68,14 @@ export function apply(ctx: Context): void {
       const agent = callingAgent(exec.agent)
       const provider = args.provider
       if (provider !== undefined && provider !== 'local' && provider !== 'tencentdb' && provider !== 'openviking') {
-        throw new Error(`memory_search provider must be local, tencentdb, or openviking`)
+        throw new Error('memory_search provider must be local, tencentdb, or openviking')
       }
       const depth = args.depth
       if (depth !== undefined && depth !== 'L0' && depth !== 'L1' && depth !== 'L2') {
         throw new Error('memory_search depth must be L0, L1, or L2')
       }
       const result = await ctx.memory.search(agent, {
-        query: args.query,
+        query: args.query.trim(),
         ...args.limit === undefined ? {} : { limit: args.limit },
         ...args.max_content_bytes === undefined ? {} : { maxContentBytes: args.max_content_bytes },
         ...provider === undefined ? {} : { provider },
@@ -86,13 +86,17 @@ export function apply(ctx: Context): void {
         version: 1,
         provider: result.provider,
         workspace: result.workspace,
-        query: args.query,
+        query: args.query.trim(),
         hits: result.hits,
       })
       return {
         provider: result.provider,
         workspace: result.workspace,
-        hits: result.hits.map(hit => ({ ...hit, id: String(hit.id), ...hit.sessionId === undefined ? {} : { sessionId: String(hit.sessionId) } })),
+        hits: result.hits.map(hit => ({
+          ...hit,
+          id: String(hit.id),
+          ...hit.sessionId === undefined ? {} : { sessionId: String(hit.sessionId) },
+        })),
       }
     },
   }))

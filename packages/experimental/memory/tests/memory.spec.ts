@@ -30,7 +30,10 @@ class TestQuery extends SessionQueryEngine {
     return this.records.map(record => structuredClone(record))
   }
 
-  override async filterEvents(sessionId: SessionId, filters: readonly { kind: string; text?: string }[]): Promise<SessionEventSearchDocument[]> {
+  override async filterEvents(
+    sessionId: SessionId,
+    filters: readonly { kind: string; text?: string }[],
+  ): Promise<SessionEventSearchDocument[]> {
     const query = filters.find(filter => filter.kind === 'text')?.text?.toLocaleLowerCase() ?? ''
     return (this.documents.get(String(sessionId)) ?? []).filter(document => document.text.toLocaleLowerCase().includes(query))
   }
@@ -128,10 +131,27 @@ describe('MemoryService', () => {
   })
 
   it('requires explicit OpenViking depth', async () => {
-    const { ctx, agent, service } = await setup('/workspace/stub', 'unused', { providers: ['openviking'] })
+    const { ctx, agent, service } = await setup('/workspace/stub', 'unused', { providers: ['local', 'openviking'] })
     await expect(service.search(agent, { provider: 'openviking', query: 'retry', signal: new AbortController().signal }))
       .rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await ctx.fiber.dispose()
+  })
+
+  it('resolves defaults and canonical query without optional undefined fields', async () => {
+    const { ctx, agent, service } = await setup('/workspace/a')
+    const resolved = service.resolve(agent, { query: '  retry  ', signal: new AbortController().signal })
+    expect(resolved).toMatchObject({ provider: { id: 'local-session-query' }, workspace: '/workspace/a', query: 'retry', limit: 5, maxContentBytes: 8_192 })
+    expect(Object.hasOwn(resolved, 'depth')).toBe(false)
+    await ctx.fiber.dispose()
+  })
+
+  it.each([
+    [['local', 'local'], 'configured more than once'],
+    [['local', ''], 'must not be empty'],
+    [['local', 'unknown'], 'is unavailable'],
+    [['openviking'], 'must include local'],
+  ])('fails fast for invalid provider configuration %j', async (providers, message) => {
+    await expect(setup('/workspace/a', 'unused', { providers })).rejects.toThrow(message)
   })
 
   it('stops before querying when the request is already cancelled', async () => {

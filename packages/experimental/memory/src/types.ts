@@ -66,6 +66,17 @@ export interface MemoryProvider {
   search(request: MemoryProviderSearchRequest): Promise<readonly MemoryHit[]>
 }
 
+/** Immutable execution plan produced after request validation and provider selection. */
+export interface ResolvedMemorySearchSpec {
+  readonly provider: MemoryProvider
+  readonly workspace: string
+  readonly query: string
+  readonly limit: number
+  readonly maxContentBytes: number
+  readonly depth?: 'L0' | 'L1' | 'L2'
+  readonly signal: AbortSignal
+}
+
 /** Detached result of one explicit memory search. */
 /** Durable exact observation appended before citations reach a later model request. */
 export interface MemorySearchEvent {

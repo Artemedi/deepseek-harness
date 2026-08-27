@@ -8,7 +8,7 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type SessionQueryEngine from '@deepseek-ai/dsh-session-query'
-import type { MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult } from './types.ts'
+import type { MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
 import { normalizeOpenVikingRecords, normalizeTencentDbRecords, OPENVIKING_STUB_RECORDS, TENCENTDB_STUB_RECORDS } from './remote-contract.ts'
 
 function MemoryId(id: string): MemoryId {
@@ -28,7 +28,7 @@ export const MAX_MEMORY_CONTENT_BYTES = 32_768
 class StubTencentDbProvider implements MemoryProvider {
   readonly id = 'tencentdb'
 
-  async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
+  search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
     return normalizeTencentDbRecords(TENCENTDB_STUB_RECORDS, request)
   }
 }
@@ -36,7 +36,7 @@ class StubTencentDbProvider implements MemoryProvider {
 class StubOpenVikingProvider implements MemoryProvider {
   readonly id = 'openviking'
 
-  async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
+  search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
     return normalizeOpenVikingRecords(OPENVIKING_STUB_RECORDS, request.depth, request)
   }
 }
@@ -73,7 +73,7 @@ export interface Config {
   readonly defaultLimit?: number
   /** Default aggregate UTF-8 citation cap. */
   readonly defaultMaxContentBytes?: number
-  /** Explicitly enabled local provider routes; local is always available. */
+  /** Explicitly enabled provider routes; `local` must be included. */
   readonly providers?: string[]
 }
 
@@ -110,17 +110,25 @@ export default class MemoryService extends Service {
       ['tencentdb', new StubTencentDbProvider()],
       ['openviking', new StubOpenVikingProvider()],
     ])
-    this.providers = new Map(this.config.providers.map(id => [id, available.get(id)!]))
-    if (!this.providers.has('local')) this.providers.set('local', available.get('local')!)
+    const providers = new Map<string, MemoryProvider>()
+    for (const id of this.config.providers) {
+      if (id.trim().length === 0) throw new HarnessError('memory provider id must not be empty', 'MEMORY_INVALID_REQUEST')
+      if (providers.has(id)) throw new HarnessError(`memory provider "${id}" is configured more than once`, 'MEMORY_INVALID_REQUEST')
+      const provider = available.get(id)
+      if (provider === undefined) throw new HarnessError(`memory provider "${id}" is unavailable`, 'MEMORY_PROVIDER_ERROR')
+      providers.set(id, provider)
+    }
+    if (!providers.has('local')) throw new HarnessError('memory provider configuration must include local', 'MEMORY_INVALID_REQUEST')
+    this.providers = providers
   }
 
   /**
-   * Search same-workspace session history for bounded model-facing citations.
+   * Resolve and validate one explicit memory search before provider execution.
    * @param agent - exact live caller whose session supplies the workspace scope.
-   * @param request - query, bounds, and cancellation.
-   * @returns detached citations that a consumer must log before model use.
+   * @param request - query, bounds, provider route, and cancellation.
+   * @returns immutable provider execution specification.
    */
-  async search(agent: Agent, request: MemorySearchRequest): Promise<MemorySearchResult> {
+  resolve(agent: Agent, request: MemorySearchRequest): ResolvedMemorySearchSpec {
     if (this.ctx.agents.get(agent.id) !== agent) {
       throw new HarnessError('memory search requires an exact live Agent', 'MEMORY_STALE_AGENT')
     }
@@ -139,15 +147,31 @@ export default class MemoryService extends Service {
       throw new HarnessError(`memory search maxContentBytes must be an integer from 1 through ${MAX_MEMORY_CONTENT_BYTES}`, 'MEMORY_INVALID_REQUEST')
     }
     if (request.signal.aborted) throw request.signal.reason
-
     const providerId = request.provider ?? 'local'
     const provider = this.providers.get(providerId)
     if (provider === undefined) throw new HarnessError(`memory provider "${providerId}" is not enabled`, 'MEMORY_PROVIDER_ERROR')
     if (providerId === 'openviking' && request.depth === undefined) {
       throw new HarnessError('OpenViking retrieval depth is required', 'MEMORY_INVALID_REQUEST')
     }
-    const providerRequest: MemoryProviderSearchRequest = { workspace, query, limit, maxContentBytes, signal: request.signal, ...request.depth === undefined ? {} : { depth: request.depth } }
-    const hits = await provider.search(providerRequest)
-    return { provider: provider.id, workspace, hits }
+    return {
+      provider, workspace, query, limit, maxContentBytes, signal: request.signal,
+      ...request.depth === undefined ? {} : { depth: request.depth },
+    }
+  }
+
+  /**
+   * Search same-workspace history using a resolved provider specification.
+   * @param agent - exact live caller whose session supplies the workspace scope.
+   * @param request - query, bounds, provider route, and cancellation.
+   * @returns detached citations that a consumer must log before model use.
+   */
+  async search(agent: Agent, request: MemorySearchRequest): Promise<MemorySearchResult> {
+    const spec = this.resolve(agent, request)
+    const providerRequest: MemoryProviderSearchRequest = {
+      workspace: spec.workspace, query: spec.query, limit: spec.limit, maxContentBytes: spec.maxContentBytes, signal: spec.signal,
+      ...spec.depth === undefined ? {} : { depth: spec.depth },
+    }
+    const hits = await spec.provider.search(providerRequest)
+    return { provider: spec.provider.id, workspace: spec.workspace, hits }
   }
 }

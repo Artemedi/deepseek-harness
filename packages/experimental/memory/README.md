@@ -2,7 +2,7 @@
 
 `@deepseek-ai/dsh-experimental-memory` provides explicit, workspace-authorized retrieval over the DSH session-query corpus.
 
-The service accepts an exact live `Agent`, derives the workspace from `agent.session.header.cwd`, validates request bounds, and delegates retrieval to a provider-neutral search interface. The shipped provider reads bounded citations from same-workspace session events. It does not store provider state, inject prompt content, or replace session persistence. The `memory/search` event records the exact citations before a consumer gives them to a later model request.
+The service accepts an exact live `Agent`, derives the workspace from `agent.session.header.cwd`, validates request bounds, and delegates retrieval to a provider-neutral search interface. The shipped `local` provider reads bounded citations from same-workspace session events and is mandatory in the configured provider set. Provider configuration is resolved at load time: empty, duplicate, unknown, or missing-`local` routes fail before any search runs. The service does not store provider state, inject prompt content, or replace session persistence. The `memory/search` event records the exact normalized query and citations before a consumer gives them to a later model request.
 
 ## Model Experience
 
