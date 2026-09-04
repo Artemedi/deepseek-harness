@@ -15,7 +15,9 @@ const root = resolve(import.meta.dirname, '..')
 /** The spec inventory mirrored from vitest.config.ts testIncludes. */
 const allSpecs = new Set([
   ...globSync('packages/*/*/tests/**/*.spec.ts', { cwd: root }),
+  ...globSync('packages/experimental/*/tests/**/*.spec.ts', { cwd: root }),
   ...globSync('packages/*/*/tests/**/*.spec.tsx', { cwd: root }),
+  ...globSync('packages/experimental/*/tests/**/*.spec.tsx', { cwd: root }),
   ...globSync('apps/*/tests/**/*.spec.ts', { cwd: root }),
   ...globSync('examples/*/tests/**/*.spec.ts', { cwd: root }),
   ...globSync('scripts/**/*.spec.ts', { cwd: root }),
