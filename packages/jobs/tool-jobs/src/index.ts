@@ -303,7 +303,8 @@ export function apply(ctx: Context, config: Config): void {
     name: 'job_output',
     description: 'Read a background job. Stream jobs return only output since the previous read; '
       + 'final-output jobs return their result after settlement. Every response ends with '
-      + '`[status: ...]`. Reads are non-blocking unless `wait: true`, which waits up to the configured cap.',
+      + '`[status: ...]`. Reads are non-blocking unless `wait: true`, which waits up to the configured cap. '
+      + 'Use this with job ids returned by background `subagent` calls, not with agent ids from `list_agents`.',
     // A timed-out wait returns job state rather than a TOOL_TIMEOUT error, so
     // this tool owns its deadline instead of using ToolDefinition.timeoutMs.
     parameters: {
@@ -361,7 +362,8 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'job_kill',
-    description: 'Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops.',
+    description: 'Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops. '
+      + 'Use this with job ids returned by background `subagent` calls, not with agent ids from `list_agents`.',
     parameters: {
       job_id: { type: 'string', required: true, description: 'Job id returned by the tool that started the background work.' },
       reason: { type: 'string', description: 'Optional short reason, recorded in the log and forwarded to the job.' },

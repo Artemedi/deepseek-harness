@@ -102,7 +102,8 @@ export function apply(ctx: Context): void {
       + 'not be read are reported as diagnostics instead of being silently dropped. Scope `descendants` '
       + 'walks the whole tree below you in stable pre-order, annotating each entry with its durable direct-parent '
       + 'session id and depth. You may use `send_message` only for depth-1 entries; deeper entries are '
-      + 'candidates for `interrupt_agent` only.',
+      + 'candidates for `interrupt_agent` only. '
+      + 'The ids returned here are agent ids for `send_message` and `interrupt_agent`; they are not job ids and cannot be used with `job_output` or `job_kill`.',
     parameters: {
       scope: {
         type: 'string',

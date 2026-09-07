@@ -30,7 +30,8 @@ export function apply(ctx: Context): void {
       + 'becomes the subagent\'s next turn: if it is still working, the message waits until its current turn '
       + 'finishes, so it cannot redirect work already underway. This call returns no answer from the '
       + 'subagent — only confirmation that the message was delivered — so use it to give it more work. A '
-      + 'failure means the message was NOT delivered.',
+      + 'failure means the message was NOT delivered. '
+      + 'Use the agent id returned by `list_agents`; do not pass a job id from `subagent` or `job_output`.',
     parameters: {
       subagent_id: {
         type: 'string',
@@ -84,7 +85,8 @@ export function apply(ctx: Context): void {
       + 'queued for the agent stay parked until a later send_message, agents it started keep running, and '
       + 'the agent itself stays available for follow-ups. This call returns as soon as the stop request is '
       + 'accepted, so the target may keep running briefly; interrupting an agent that already finished is '
-      + 'an accepted no-op.',
+      + 'an accepted no-op. '
+      + 'Use the agent id returned by `list_agents`; do not pass a job id from `subagent` or `job_output`.',
     parameters: {
       agent_id: {
         type: 'string',

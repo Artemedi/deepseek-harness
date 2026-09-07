@@ -53,6 +53,47 @@ Installation controls Host availability, not model permission. The Bundle suppli
 
 The standalone composition below shows the complete explicit capability. A Profile based on `@deepseek-ai/dsh-base` keeps its existing Job rows, adds the product provider and tool rows, and does not mount duplicate Job services.
 
+## Authentication and the OAuth lifecycle
+
+The Bundle supplies the SDK platform payload; **authentication and account state are native to Claude Code** and live in the host's user, project, and local settings, plus `~/.claude/.credentials.json` for the OAuth tokens. This package does not log in, refresh tokens, or rewrite Claude settings.
+
+When the host OAuth is missing, expired, or its refresh window has passed, the Claude Code subagent fails with a `subagent run failed` error whose diagnostic is
+
+```
+Product subagent failure (product: Claude Code; stage: query-run; category: invalid-success; exit code: 1)
+```
+
+The same `invalid-success` is reported when the host's `ANTHROPIC_AUTH_TOKEN` points at a dead or rate-limited proxy, because the SDK then receives no usable credentials and the CLI exits non-zero. Verify in this order:
+
+1. `claude -p "say hello"` from the same shell that runs the DSH host process. If this fails, fix the Claude CLI first; the DSH subagent just inherits that state.
+2. `cat ~/.claude/.credentials.json` — the `claudeAiOauth` block must have a non-empty `accessToken` and a future `refreshTokenExpiresAt` (default subscription: Pro). Re-run `claude auth login` when either field is blank or expired.
+3. `claude auth status` and `cat ~/.claude/settings.json` — make sure the `env` block does **not** carry a stale `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN` pointing at a defunct upstream. Claude Code prefers those environment variables over the OAuth tokens and will silently route through the wrong endpoint, producing the same `invalid-success`.
+4. `dsh plugin --profile <name> list | grep subagent-claude-code` — confirm the Bundle is installed and the host provider is registered; the failure is OAuth even when the Bundle is dormant.
+
+A passing smoke test after the fix:
+
+```sh
+# 1. CLI works locally
+claude -p "say hello"
+
+# 2. DSH registers the host provider
+dsh --profile <name> --dump-config | grep -A 4 'subagent-claude-code'
+
+# 3. Drive a foreground subagent from any session
+```
+
+If step 1 succeeds but the DSH subagent still fails, capture the session's `tool/result` text and the `subagent/started` / `subagent/finished` events; the failure is no longer OAuth and belongs to the per-run SDK query rather than the auth layer.
+
+## Preset comparison
+
+| Preset | Primary chat | `subagent` | `subagent_fork` | When to use |
+| --- | --- | --- | --- | --- |
+| `standard` | free-router | `spawn` | `fork` | All-local, no Claude Code dependency |
+| `standard-claude` | free-router | `claude-code` | `fork` | Claude Code subagent when OAuth is valid |
+| `claude` | free-router | `claude-code` | `claude-code` | Maximum Claude CLI delivery for both chat and subagents |
+
+For maximum delivery, use the `claude` preset and call `subagent` / `subagent_fork` from the session. The primary chat still routes through `free-router`; the delegated runs use Claude Code CLI. Valid OAuth and clean `~/.claude/settings.json` are required.
+
 ```yaml
 - id: subagent-claude-safe
   name: '@deepseek-ai/dsh-subagent-claude-code'

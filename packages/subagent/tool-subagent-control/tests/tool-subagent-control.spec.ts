@@ -106,9 +106,11 @@ describe('dsh-tool-subagent-control', () => {
     expect(schemas).toHaveLength(1)
     const props = (schemas[0]!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
     expect(Object.keys(props).sort()).toEqual(['message', 'subagent_id'])
-    // The continuable path has no Task, so the schema must not promise one.
-    expect(schemas[0]!.description).not.toContain('job_output')
-    expect(schemas[0]!.description).not.toContain('job id')
+    // Explicitly distinguish agent ids from job ids so the model does not
+    // confuse `list_agents` output with `job_output`/`job_kill` ids.
+    expect(schemas[0]!.description).toContain('agent id')
+    expect(schemas[0]!.description).toContain('job_output')
+    expect(schemas[0]!.description).toContain('job id')
     // Follow-up ordering is model-visible: it cannot redirect the open turn.
     expect(schemas[0]!.description).toContain('next turn')
   })
