@@ -457,7 +457,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolMemory)
     },
     note:
-      'Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval is available only with explicit provider configuration, while OpenViking HTTP retrieval remains deferred.',
+      'Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval requires explicit endpoint, credential, service, and tenant-isolation configuration.',
   },
   {
     pkg: '@deepseek-ai/dsh-experimental-tool-verifier',

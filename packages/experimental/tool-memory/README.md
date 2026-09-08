@@ -20,4 +20,4 @@ The tool definition remains prefix-stable while composition is unchanged. A new 
 
 ## Known Limitations and Deferred Work
 
-- **Explicit search only** — this consumer has no automatic recall or `memory_store`. TencentDB and OpenViking native routes remain opt-in and require provider-specific endpoint configuration; omitted configuration selects deterministic local stubs. A later model request can reuse only citations already recorded in the session log.
+- **Explicit search only** — this consumer has no automatic recall or `memory_store`. TencentDB and OpenViking native routes remain opt-in and require provider-specific endpoint configuration. TencentDB also requires explicit service, team, agent, and user isolation identifiers. A later model request can reuse only citations already recorded in the session log.

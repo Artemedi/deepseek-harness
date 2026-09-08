@@ -32,7 +32,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@deepseek-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@deepseek-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@deepseek-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
-| `@deepseek-ai/dsh-experimental-tool-memory` | `memory_search` | `ctx.tools`, `ctx.memory`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `memory/search exact bounded citations`, `tool/result` | - | Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval is available only with explicit provider configuration, while OpenViking HTTP retrieval remains deferred. |
+| `@deepseek-ai/dsh-experimental-tool-memory` | `memory_search` | `ctx.tools`, `ctx.memory`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `memory/search exact bounded citations`, `tool/result` | - | Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval requires explicit endpoint, credential, service, and tenant-isolation configuration. |
 | `@deepseek-ai/dsh-experimental-tool-verifier` | `verify_pair` | `ctx.tools`, `ctx.verifier` | `tool/call`, `tool/result` | - | Opt-in pairwise evidence comparison through the native JSON verifier. The score is probabilistic preference only and never a correctness proof or goal-completion authority. |
 | `@deepseek-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@deepseek-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered tool name is the load-time `toolName` config (default `subagent`); the schema above is that default. The shipped compositions load this package once per subagent backend, so the model additionally sees `subagent_fork` bound to the fork backend. Each instance's description, `run_in_background` parameter, and system-prompt policy follow its own `backgroundMode` and `enableRunInBackground`, so the two shipped schemas are not identical: `subagent` is `continuable` and defaults omitted calls to background with automatic settlement delivery, while `subagent_fork` stays `one-shot` and defaults them to foreground — see `packages/bundle/base/cordis.patch.yml` and `examples/acp-agent/cordis.yml`. |
@@ -1305,7 +1305,7 @@ Search prior workspace session history for explicit, cited memory. Results are r
 
 Source: [`packages/experimental/tool-memory/src/index.ts`](../packages/experimental/tool-memory/src/index.ts)
 
-Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval is available only with explicit provider configuration, while OpenViking HTTP retrieval remains deferred.
+Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval requires explicit endpoint, credential, service, and tenant-isolation configuration.
 
 <a id="deepseek-aidsh-experimental-tool-verifier"></a>
 
@@ -1631,7 +1631,7 @@ The registered tool name is the load-time `toolName` config (default `subagent`)
 
 ### `interrupt_agent`
 
-Request cancellation of a background agent's current turn by its agent id. The target may be your direct child or a deeper agent created under you. Only the current turn stops: messages already queued for the agent stay parked until a later send_message, agents it started keep running, and the agent itself stays available for follow-ups. This call returns as soon as the stop request is accepted, so the target may keep running briefly; interrupting an agent that already finished is an accepted no-op.
+Request cancellation of a background agent's current turn by its agent id. The target may be your direct child or a deeper agent created under you. Only the current turn stops: messages already queued for the agent stay parked until a later send_message, agents it started keep running, and the agent itself stays available for follow-ups. This call returns as soon as the stop request is accepted, so the target may keep running briefly; interrupting an agent that already finished is an accepted no-op. Use the agent id returned by `list_agents`; do not pass a job id from `subagent` or `job_output`.
 
 ```json
 {
@@ -1652,7 +1652,7 @@ Source: [`packages/subagent/tool-subagent-control/src/index.ts`](../packages/sub
 
 ### `list_agents`
 
-List your continuable background subagents by durable id and label. Use it to recall which ones you started, not to poll for completion — you are told when one finishes. Status comes from the live registry: running means the agent is working right now, idle means it is loaded but between turns (it may be waiting on agents it started), and ready means it exists only in storage — resumable, not terminal, and not a result waiting to be collected; a `send_message` starts a new turn on the same conversation, and a direct child remains a `send_message` candidate in every status. The snapshot is not a delivery promise — `send_message` performs the authoritative check and may still fail. Children that could not be read are reported as diagnostics instead of being silently dropped. Scope `descendants` walks the whole tree below you in stable pre-order, annotating each entry with its durable direct-parent session id and depth. You may use `send_message` only for depth-1 entries; deeper entries are candidates for `interrupt_agent` only.
+List your continuable background subagents by durable id and label. Use it to recall which ones you started, not to poll for completion — you are told when one finishes. Status comes from the live registry: running means the agent is working right now, idle means it is loaded but between turns (it may be waiting on agents it started), and ready means it exists only in storage — resumable, not terminal, and not a result waiting to be collected; a `send_message` starts a new turn on the same conversation, and a direct child remains a `send_message` candidate in every status. The snapshot is not a delivery promise — `send_message` performs the authoritative check and may still fail. Children that could not be read are reported as diagnostics instead of being silently dropped. Scope `descendants` walks the whole tree below you in stable pre-order, annotating each entry with its durable direct-parent session id and depth. You may use `send_message` only for depth-1 entries; deeper entries are candidates for `interrupt_agent` only. The ids returned here are agent ids for `send_message` and `interrupt_agent`; they are not job ids and cannot be used with `job_output` or `job_kill`.
 
 ```json
 {
@@ -1674,7 +1674,7 @@ Source: [`packages/subagent/tool-subagent-control/src/list-agents.ts`](../packag
 
 ### `send_message`
 
-Send a message to a background subagent by its subagent id, continuing the same conversation. It becomes the subagent's next turn: if it is still working, the message waits until its current turn finishes, so it cannot redirect work already underway. This call returns no answer from the subagent — only confirmation that the message was delivered — so use it to give it more work. A failure means the message was NOT delivered.
+Send a message to a background subagent by its subagent id, continuing the same conversation. It becomes the subagent's next turn: if it is still working, the message waits until its current turn finishes, so it cannot redirect work already underway. This call returns no answer from the subagent — only confirmation that the message was delivered — so use it to give it more work. A failure means the message was NOT delivered. Use the agent id returned by `list_agents`; do not pass a job id from `subagent` or `job_output`.
 
 ```json
 {
@@ -1733,7 +1733,7 @@ Registered per continuable in-process child rather than globally, so this schema
 
 ### `job_kill`
 
-Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops.
+Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops. Use this with job ids returned by background `subagent` calls, not with agent ids from `list_agents`.
 
 ```json
 {
@@ -1771,7 +1771,7 @@ Source: [`packages/jobs/tool-jobs/src/index.ts`](../packages/jobs/tool-jobs/src/
 
 ### `job_output`
 
-Read a background job. Stream jobs return only output since the previous read; final-output jobs return their result after settlement. Every response ends with `[status: ...]`. Reads are non-blocking unless `wait: true`, which waits up to the configured cap.
+Read a background job. Stream jobs return only output since the previous read; final-output jobs return their result after settlement. Every response ends with `[status: ...]`. Reads are non-blocking unless `wait: true`, which waits up to the configured cap. Use this with job ids returned by background `subagent` calls, not with agent ids from `list_agents`.
 
 ```json
 {

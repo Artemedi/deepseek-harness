@@ -1,0 +1,16 @@
+# Opt-in native TencentDB Agent Memory retrieval for an existing DSH profile.
+# Store TDAI_MEMORY_API_KEY in DSH credentials or an environment layer.
+- insert:
+    - id: tencentdb-memory-service
+      name: '@deepseek-ai/dsh-experimental-memory'
+      config:
+        providers: [local, tencentdb]
+        tencentdb:
+          baseUrl: http://127.0.0.1:8420
+          credentialRef: TDAI_MEMORY_API_KEY
+          serviceId: default
+          teamId: default
+          agentId: default
+          userId: default
+    - id: tencentdb-memory-tool
+      name: '@deepseek-ai/dsh-experimental-tool-memory'

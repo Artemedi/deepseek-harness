@@ -1,49 +1,34 @@
-# Handoff (обновлено: 2026-08-30)
+# Handoff (обновлено: 2026-09-09)
 
 ## Текущая задача
 
-Шестислойная модель памяти агента принята и зафиксирована в
-[Agent Note 2026-08-30-six-layer-agent-memory-model](.agents/notes/implemented/process/2026-08-30-six-layer-agent-memory-model.md)
-(commit `d29fdb630e`). Активный продуктовый work-in-progress —
-`memory_search` (фаза 2 трёхпроектного плана). План:
-`.agents/plans/experimental-memory-search.md`.
+Довести TencentDB Agent Memory от экспериментального search provider до полезной native-интеграции. Активный план: [experimental-memory-search.md](plans/experimental-memory-search.md).
 
 ## Состояние
 
-- ✅ Шестислойная модель памяти развёрнута: `AGENTS.md` (≤1400 слов, бюджет
-  снижен 1950→1400), `.agents/HANDOFF.md`, `.agents/plans/`, `.agents/knowledge/`
-  (5 topics), `.agents/notes/` (без изменений топологии), `git log` = история.
-- ✅ README+audit_log замещены: внешний `audit-2026-08-30.json` НЕ импортирован;
-  2 DSH-релевантных факта свернуты в `knowledge/sandbox.md` как one-liners.
-- ✅ ADR ≡ `architecture`-класс Agent Notes; `docs/adr/` не создан.
-- ✅ Root `AGENTS.md` прошёл: doc-budgets ✅, md-links ✅, md-wrap ✅, lefthook ✅.
-- 🔄 WIP: `memory_search` local provider (`ctx.sessionQuery`, scope из
-  `SessionHeader.cwd`).
-- ⏳ Фазы 1, 3–5 (TencentDB proxy validation, native/TencentDB/OpenViking/Ruflo) —
-  not started.
+- ✅ Local `ctx.memory` и `memory_search` ограничены workspace вызывающего Agent и записывают точные citations в `memory/search` до возврата модели.
+- ✅ TencentDB L1 search приведён к v3 контракту: `x-tdai-service-id`, Team/Agent/User identifiers, `data.items` и проверка business envelope.
+- ✅ Включённый TencentDB route без реальной конфигурации падает при загрузке; runtime stub удалён.
+- ✅ Добавлен opt-in overlay `integrations/tencentdb-agent-memory/memory.cordis.yml.example`.
+- ✅ Фокусные tests: 17 passed; package TypeScript checks и `git diff --check` прошли.
+- ⏳ L0 capture, автоматический L1/L2/L3 recall и live MemoryCore smoke не реализованы.
 
 ## Следующий шаг
 
-Реализовать search-only provider в `packages/experimental/{memory,tool-memory}/`
-по контеркту в
-`.agents/notes/proposed/architecture/2026-08-26-experimental-memory-search.md`.
+Добавить lifecycle consumer отдельным plugin: искать и логировать recall через `agent/pre-step`, а завершённые turns ставить в durable capture queue после `turn/end` и выполнять через `agent.runMaintenance()` при idle. Нельзя вызывать `Session.append()` реентрантно из `session/event`.
 
-## Открытые вопросы / блокеры
+## Открытые вопросы
 
-- **Risk-based cross-review threshold** (Agent Note 2026-08-30) требует
-  уточнения "significant" перед первым PR по `memory_search`.
-- **TencentDB proxy testbed** — не поднят, блокер для фазы 1, не для фазы 2.
+- Определить отображение DSH user/team/agent identities на TencentDB isolation вместо единственного статического tuple для всего deployment.
+- Выбрать at-least-once idempotency: deterministic message IDs или отдельный provider-supported key.
+- Зафиксировать fail-open policy для recall outage и bounded durable diagnostic.
 
 ## Грабли
 
-- **`bwrap` недоступен** (`spawn bwrap ENOENT`). Host escalation only с evidence.
-- **232 зомби `package.json)`** — артефакты прерванного `pnpm install`. Не
-  `git add`. Чистить через `pnpm run clean`.
-- **`dsh web` source launch** через tsx ESM hook; не стартовать отдельный Vite.
-- **`test:e2e`** self-skips без `DEEPSEEK_API_KEY`; `test:coverage` = CI gate.
-- **`--force` запрещён** — только `--force-with-lease`, abort on remote movement.
-- **lefthook pre-commit** требует `node` в PATH — в этом sandbox node лежит в
-  `/var/home/Trintos/projects/bitvec-dsh/node-v22.11.0-linux-x64/bin/`.
+- Рабочее дерево уже содержит много чужих untracked файлов, включая каталог `integrations/`; не удалять и не добавлять их массово.
+- `pnpm exec` пытается восстановить неполный workspace и выходит в сеть; локальные Vitest/TypeScript запускать через установленные JS entrypoints.
+- `tsx` требует IPC вне managed sandbox для генераторов.
+- `bwrap` недоступен (`spawn bwrap ENOENT`).
 
 ## Known debt (pre-existing, not introduced here)
 
@@ -56,4 +41,4 @@
 
 ## Память
 
-Протокол + таблица: [`.agents/knowledge/memory.md`](.agents/knowledge/memory.md).
+Протокол и шестислойная модель: [memory.md](knowledge/memory.md).

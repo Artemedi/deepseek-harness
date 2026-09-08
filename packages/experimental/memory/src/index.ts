@@ -11,7 +11,7 @@ import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import type { MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
-import { normalizeOpenVikingRecords, normalizeTencentDbRecords, OPENVIKING_STUB_RECORDS, TENCENTDB_STUB_RECORDS } from './remote-contract.ts'
+import { normalizeOpenVikingRecords, OPENVIKING_STUB_RECORDS } from './remote-contract.ts'
 import TencentDbHttpProvider, { type TencentDbHttpConfig } from './tencentdb-http.ts'
 import OpenVikingHttpProvider, { type OpenVikingHttpConfig } from './openviking-http.ts'
 
@@ -32,15 +32,7 @@ export const MAX_MEMORY_HITS = 20
 /** Maximum bytes the local provider may return in one request. */
 export const MAX_MEMORY_CONTENT_BYTES = 32_768
 
-/** Provider backed by DSH's existing workspace-authorized session-query corpus. */
-class StubTencentDbProvider implements MemoryProvider {
-  readonly id = 'tencentdb'
-
-  search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
-    return Promise.resolve(normalizeTencentDbRecords(TENCENTDB_STUB_RECORDS, request))
-  }
-}
-
+/** Deterministic OpenViking records used only when that experimental route is explicitly enabled without HTTP configuration. */
 class StubOpenVikingProvider implements MemoryProvider {
   readonly id = 'openviking'
 
@@ -97,6 +89,10 @@ export const Config: z<Config> = z.object({
   tencentdb: z.object({
     baseUrl: z.string(),
     credentialRef: z.string(),
+    serviceId: z.string(),
+    teamId: z.string(),
+    agentId: z.string(),
+    userId: z.string(),
     authHeader: z.string().default('Authorization'),
     timeoutMs: z.number().step(1).min(1).max(300_000).default(30_000),
     maxResponseBytes: z.number().step(1).min(1).max(16_777_216).default(1_048_576),
@@ -141,12 +137,6 @@ export default class MemoryService extends Service {
     }
     const available = new Map<string, MemoryProvider>([
       ['local', new LocalSessionMemoryProvider(ctx.sessionQuery)],
-      ['tencentdb', this.config.tencentdb === undefined
-        ? new StubTencentDbProvider()
-        : new TencentDbHttpProvider(this.config.tencentdb, async (ref) => {
-          const credentials = ctx.get('credentials') as CredentialProvider | undefined
-          return (await credentials?.resolve(credentialRef(ref)))?.value
-        })],
       ['openviking', this.config.openviking === undefined
         ? new StubOpenVikingProvider()
         : new OpenVikingHttpProvider(this.config.openviking, async (ref) => {
@@ -154,6 +144,15 @@ export default class MemoryService extends Service {
           return (await credentials?.resolve(credentialRef(ref)))?.value
         })],
     ])
+    if (this.config.providers.includes('tencentdb') && this.config.tencentdb === undefined) {
+      throw new HarnessError('TencentDB provider configuration is required when the route is enabled', 'MEMORY_INVALID_REQUEST')
+    }
+    if (this.config.tencentdb !== undefined) {
+      available.set('tencentdb', new TencentDbHttpProvider(this.config.tencentdb, async (ref) => {
+        const credentials = ctx.get('credentials') as CredentialProvider | undefined
+        return (await credentials?.resolve(credentialRef(ref)))?.value
+      }))
+    }
     const providers = new Map<string, MemoryProvider>()
     for (const id of this.config.providers) {
       if (id.trim().length === 0) throw new HarnessError('memory provider id must not be empty', 'MEMORY_INVALID_REQUEST')

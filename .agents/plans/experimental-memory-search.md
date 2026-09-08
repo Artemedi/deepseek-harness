@@ -21,28 +21,37 @@ rejects events claiming a workspace other than the owning session.
       (`packages/experimental/verifier/`, `packages/bundle/experimental-verifier/`)
 - [x] Adopt risk-based cross-review policy
       (`.agents/notes/implemented/2026-08-30-risk-based-cross-review-policy.md`)
-- [ ] Implement local **search-only** provider:
-  - [ ] workspace scope = `SessionHeader.cwd` of caller (not tool args)
-  - [ ] validate before query: stale agents, missing workspace, empty query,
+- [x] Implement local **search-only** provider:
+  - [x] workspace scope = `SessionHeader.cwd` of caller (not tool args)
+  - [x] validate before query: stale agents, missing workspace, empty query,
         `hit_limit`, aggregate byte limit (`MAX_BYTES`)
-  - [ ] return only citations from the caller's workspace
-- [ ] Implement `memory_search` tool (tool agent):
-  - [ ] call `ctx.memory.search()`
-  - [ ] on success, append `memory/search` event with exact citations
+  - [x] return only citations from the caller's workspace
+- [x] Implement `memory_search` tool (tool agent):
+  - [x] call `ctx.memory.search()`
+  - [x] on success, append `memory/search` event with exact citations
       (append must succeed before returning model-visible text)
-  - [ ] on append rejection / failure, do NOT return retrieved text
-- [ ] Wire `append-time invariant`: reject `memory/search` whose workspace ≠
+  - [x] on append rejection / failure, do NOT return retrieved text
+- [x] Wire `append-time invariant`: reject `memory/search` whose workspace ≠
       owning session's workspace
-- [ ] Add package invariant test for the workspace-mismatch rejection
-- [ ] Loader-composed integration test:
-  - [ ] run installed `memory_search` tool against a local workspace with
+- [x] Add package invariant test for the workspace-mismatch rejection
+- [x] Loader-composed integration test:
+  - [x] run installed `memory_search` tool against a local workspace with
         seeded session history
-  - [ ] observe JSON result (citations only, in bounded amounts)
-  - [ ] observe durable `memory/search` event on disk
-- [ ] Snapshot test covering model-visible transcript output
-- [ ] Update `.agents/HANDOFF.md` with current state
-- [ ] Review: does any path inject retrieved text outside the session log?
+  - [x] observe JSON result (citations only, in bounded amounts)
+  - [x] observe durable `memory/search` event on disk
+- [x] Snapshot test covering model-visible transcript output
+- [x] Update `.agents/HANDOFF.md` with current state
+- [x] Review: does any path inject retrieved text outside the session log?
       (must not — replay safety gate)
+
+## TencentDB follow-up
+
+- [x] Align explicit L1 search with the upstream v3 isolation, service-header, and response-envelope contract.
+- [x] Reject an enabled TencentDB route without real connection and isolation configuration.
+- [x] Add an opt-in native retrieval overlay.
+- [ ] Add durable L0 capture with retry and idempotency events.
+- [ ] Add automatic logged L1/L2/L3 recall before the first model step.
+- [ ] Add a live standalone MemoryCore smoke test.
 
 ## Definition of done
 

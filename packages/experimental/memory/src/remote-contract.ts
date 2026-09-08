@@ -38,15 +38,7 @@ export interface TencentDbRecord {
   readonly title: string
   readonly content: string
   readonly source: string
-  readonly workspace: string
 }
-
-/** Deterministic local TencentDB stub record. */
-export const TENCENTDB_STUB_RECORDS: readonly TencentDbRecord[] = [{
-  id: 'stub-chat-1', kind: 'memory', title: 'Gateway retry', content: 'TencentDB stub retry evidence', source: 'chat-memory', workspace: '/workspace/stub',
-}, {
-  id: 'stub-chat-a', kind: 'memory', title: 'Loader retry', content: 'TencentDB Loader stub retry evidence', source: 'chat-memory', workspace: '/workspace/a',
-}]
 
 /** Minimal OpenViking record accepted by the local stub adapter. */
 export interface OpenVikingRecord {
@@ -82,7 +74,7 @@ export function normalizeTencentDbRecords(
   records: readonly TencentDbRecord[],
   request: RemoteMemorySearchRequest,
 ): readonly RemoteMemoryCitation[] {
-  return bounded(records.filter(record => record.workspace === request.workspace).map(record => ({
+  return bounded(records.map(record => ({
     id: memoryId(`tencentdb:${record.id}`), kind: record.kind, title: record.title,
     source: record.source, content: record.content,
   })), request)

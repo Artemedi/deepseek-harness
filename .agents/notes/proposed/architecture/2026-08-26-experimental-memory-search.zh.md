@@ -14,6 +14,8 @@ Status: proposed
 
 第一个 provider 只提供 search。它在查询前校验 stale Agent、缺失 workspace、空 query、hit limit 和总字节限制。append-time invariant 拒绝 workspace 与 owning session 不一致的 `memory/search` event。
 
+Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH workspace 转换为 provider tenancy。部署配置提供 memory service、Team、Agent 和 User 标识符；每次搜索都发送该 isolation tuple，并在调用者的 DSH workspace 下记录返回的 L1 atomic-memory citations。缺少连接或隔离配置时，composition 会被拒绝，而不会选择测试数据。
+
 ## Alternatives considered
 
 **直接把外部结果注入提示词。** 拒绝，因为检索文本会成为无法从会话日志重建的隐藏 model state。
@@ -28,7 +30,8 @@ Status: proposed
 - `memory_search` 在返回 model-visible text 前把完整返回值记录到 `memory/search`。
 - package invariant 拒绝声明 workspace 与 owning session 不同的 event。
 - Loader-composed test 通过已安装的 tool，检查 JSON result 和 durable event。
+- TencentDB request 保留配置的 v3 isolation tuple，校验业务 response envelope，并且启用的 runtime route 绝不暴露 deterministic stub。
 
 ## Risks
 
-初始 provider 只搜索 session history，不提供 semantic vector retrieval 或外部 durable knowledge。自动 recall、memory storage、TencentDB 或 OpenViking 需要为每个 provider 先定义 authorization、response bounds、failure behavior 和 durable event semantics。
+Local provider 只搜索 session history。TencentDB retrieval 是显式 L1 search；自动 recall、conversation capture、memory storage、L2/L3 context 和 OpenViking 需要为每个 provider 先定义 authorization、response bounds、failure behavior 和 durable event semantics。

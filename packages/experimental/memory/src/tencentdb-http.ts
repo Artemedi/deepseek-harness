@@ -10,6 +10,10 @@ import type { TencentDbRecord } from './remote-contract.ts'
 export interface TencentDbHttpConfig {
   readonly baseUrl: string
   readonly credentialRef: string
+  readonly serviceId: string
+  readonly teamId: string
+  readonly agentId: string
+  readonly userId: string
   readonly authHeader?: string
   readonly timeoutMs?: number
   readonly maxResponseBytes?: number
@@ -28,9 +32,17 @@ export default class TencentDbHttpProvider implements MemoryProvider {
   constructor(config: TencentDbHttpConfig, private readonly resolveCredential: (ref: string) => Promise<string | undefined>) {
     if (config.baseUrl.trim().length === 0) throw new HarnessError('TencentDB baseUrl must not be empty', 'MEMORY_INVALID_REQUEST')
     if (config.credentialRef.trim().length === 0) throw new HarnessError('TencentDB credentialRef must not be empty', 'MEMORY_INVALID_REQUEST')
+    if (config.serviceId.trim().length === 0) throw new HarnessError('TencentDB serviceId must not be empty', 'MEMORY_INVALID_REQUEST')
+    if (config.teamId.trim().length === 0) throw new HarnessError('TencentDB teamId must not be empty', 'MEMORY_INVALID_REQUEST')
+    if (config.agentId.trim().length === 0) throw new HarnessError('TencentDB agentId must not be empty', 'MEMORY_INVALID_REQUEST')
+    if (config.userId.trim().length === 0) throw new HarnessError('TencentDB userId must not be empty', 'MEMORY_INVALID_REQUEST')
     this.config = {
       baseUrl: config.baseUrl.replace(/\/$/, ''),
       credentialRef: config.credentialRef,
+      serviceId: config.serviceId,
+      teamId: config.teamId,
+      agentId: config.agentId,
+      userId: config.userId,
       authHeader: config.authHeader ?? 'Authorization',
       timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxResponseBytes: config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES,
@@ -50,8 +62,18 @@ export default class TencentDbHttpProvider implements MemoryProvider {
         method: 'POST',
         redirect: 'error',
         signal: controller.signal,
-        headers: { [this.config.authHeader]: `Bearer ${secret}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: request.query, workspace: request.workspace, limit: request.limit }),
+        headers: {
+          [this.config.authHeader]: `Bearer ${secret}`,
+          'x-tdai-service-id': this.config.serviceId,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          team_id: this.config.teamId,
+          agent_id: this.config.agentId,
+          user_id: this.config.userId,
+          query: request.query,
+          limit: request.limit,
+        }),
       })
       if (!response.ok) throw remoteFailure(response.status, 'tencentdb')
       const raw = await readBoundedBody(response, this.config.maxResponseBytes)
@@ -83,29 +105,29 @@ function parseRecords(raw: string): readonly TencentDbRecord[] {
   } catch {
     throw new HarnessError('TencentDB response is not valid JSON', 'MEMORY_PROVIDER_ERROR')
   }
+  if (!isRecord(value) || value.code !== 0) throw new HarnessError('TencentDB response reports an unsuccessful operation', 'MEMORY_PROVIDER_ERROR')
   const records = findRecords(value)
   if (records === undefined) throw new HarnessError('TencentDB response does not contain records', 'MEMORY_PROVIDER_ERROR')
   return records.map((record, index) => {
-    if (!isRecord(record) || typeof record.id !== 'string' || typeof record.content !== 'string' || typeof record.workspace !== 'string'
-      || typeof record.title !== 'string' || typeof record.source !== 'string' || !isKind(record.kind)) {
+    if (!isRecord(record) || typeof record.id !== 'string' || typeof record.content !== 'string') {
       throw new HarnessError(`TencentDB record ${String(index)} is malformed`, 'MEMORY_PROVIDER_ERROR')
     }
-    return record as unknown as TencentDbRecord
+    return {
+      id: record.id,
+      kind: 'memory',
+      title: typeof record.type === 'string' ? record.type : 'Atomic memory',
+      content: record.content,
+      source: `tencentdb:atomic:${record.id}`,
+    }
   })
 }
 
 function findRecords(value: unknown): readonly unknown[] | undefined {
   if (!isRecord(value)) return undefined
-  if (Array.isArray(value.records)) return value.records
-  if (Array.isArray(value.data)) return value.data
-  if (isRecord(value.data) && Array.isArray(value.data.records)) return value.data.records
+  if (isRecord(value.data) && Array.isArray(value.data.items)) return value.data.items
   return undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isKind(value: unknown): value is TencentDbRecord['kind'] {
-  return value === 'memory' || value === 'skill' || value === 'wiki' || value === 'code-graph' || value === 'resource'
 }

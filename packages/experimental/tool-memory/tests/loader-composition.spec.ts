@@ -72,7 +72,7 @@ async function boot(): Promise<Context> {
     "- name: '@deepseek-ai/dsh-system-prompt'",
     "- name: 'test-query'",
     "- name: '@deepseek-ai/dsh-experimental-memory'",
-    "  config: { providers: ['local', 'tencentdb', 'openviking'] }",
+    "  config: { providers: ['local', 'openviking'] }",
     "- name: '@deepseek-ai/dsh-session-persistence-jsonl'",
     `  config: { root: ${JSON.stringify(join(root, 'sessions'))}, compression: none }`,
     "- name: '@deepseek-ai/dsh-tools'",
@@ -132,20 +132,16 @@ describe('experimental memory real Loader composition', () => {
       }],
     })
 
-    const tencent = await ctx.tools.execute({ signal: new AbortController().signal, callId: CallId('memory-tencent'), name: 'memory_search', arguments: { provider: 'tencentdb', query: 'retry' }, agent: owner })
-    expect(tencent.isError).toBe(false)
-    expect(tencent.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('tencentdb:stub-chat-a') })
-
     const viking = await ctx.tools.execute({ signal: new AbortController().signal, callId: CallId('memory-viking'), name: 'memory_search', arguments: { provider: 'openviking', depth: 'L1', query: 'retry' }, agent: owner })
     expect(viking.isError).toBe(false)
     expect(viking.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('openviking:viking://stub/retry') })
-    expect(owner.session.events.filter(event => event.type === 'memory/search')).toHaveLength(3)
+    expect(owner.session.events.filter(event => event.type === 'memory/search')).toHaveLength(2)
     const memoryEvent = owner.session.events.find(event => event.type === 'memory/search')
     expect(memoryEvent).toBeDefined()
     await ctx.sessionPersistence.create(owner.session.header)
     await ctx.sessionPersistence.append(owner.session.id, owner.session.events)
     const loaded = await ctx.sessionPersistence.load(owner.session.id)
     expect(loaded.events.find(event => event.type === 'memory/search')?.data).toEqual(memoryEvent!.data)
-    expect(loaded.events.filter(event => event.type === 'memory/search')).toHaveLength(3)
+    expect(loaded.events.filter(event => event.type === 'memory/search')).toHaveLength(2)
   }, 30_000)
 })
