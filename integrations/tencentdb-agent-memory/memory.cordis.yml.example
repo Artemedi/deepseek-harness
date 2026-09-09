@@ -6,6 +6,7 @@
       config:
         providers: [local, tencentdb]
         automaticCapture: true
+        automaticRecall: true
         tencentdb:
           baseUrl: http://127.0.0.1:8420
           credentialRef: TDAI_MEMORY_API_KEY

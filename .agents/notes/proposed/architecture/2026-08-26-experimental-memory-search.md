@@ -18,6 +18,8 @@ The opt-in TencentDB provider uses the upstream v3 data-plane contract rather th
 
 Optional automatic capture exports only direct user text and assistant text from completed or max-token turns after the Agent becomes idle. DSH records and flushes a capture request before the remote write, then records a bounded success or failure event. Delivery is at least once because a process can stop after TencentDB accepts the turn but before DSH records success.
 
+Optional automatic recall runs once before the first step, derives its query only from direct user input, and records the exact L1 result before returning a separate model-visible reference message. The message labels remote memory as potentially stale and non-instructional. Provider failure records a safe code and does not block the model turn.
+
 ## Alternatives considered
 
 **Direct external prompt injection.** Rejected because retrieved text would become hidden model state that replay cannot reconstruct from the session log.

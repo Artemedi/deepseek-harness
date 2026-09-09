@@ -128,6 +128,13 @@ export interface MemoryCaptureFailedEvent extends MemoryCaptureSucceededEvent {
   readonly code: string
 }
 
+/** Durable failure of automatic recall that did not block the model turn. */
+export interface MemoryRecallFailedEvent {
+  readonly version: 1
+  readonly provider: 'tencentdb'
+  readonly code: string
+}
+
 /** Merge-extensible durable memory event map. */
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
@@ -136,6 +143,7 @@ declare module '@deepseek-ai/dsh-session/types' {
     'memory/capture-requested': MemoryCaptureRequestedEvent
     'memory/capture-succeeded': MemoryCaptureSucceededEvent
     'memory/capture-failed': MemoryCaptureFailedEvent
+    'memory/recall-failed': MemoryRecallFailedEvent
   }
 }
 

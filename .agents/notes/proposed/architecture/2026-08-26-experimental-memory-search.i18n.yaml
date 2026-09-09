@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-08-26-experimental-memory-search.md
-2026-08-26-experimental-memory-search.md: 7ccd96cfcdba8c84d0156dd0e76b2316a12b27cb
-2026-08-26-experimental-memory-search.zh.md: 8cc09af53c3f81f6d02694fde7ec3870366a3803
+2026-08-26-experimental-memory-search.md: 48347ff4902b1df1ddea45c4c3c0a8d3405220ea
+2026-08-26-experimental-memory-search.zh.md: fcd1edfabb7d02e60672f7a8d0c058aba173c279

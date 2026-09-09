@@ -12,11 +12,12 @@
 - ✅ Добавлен opt-in overlay `integrations/tencentdb-agent-memory/memory.cordis.yml.example`.
 - ✅ Фокусные tests: 17 passed; package TypeScript checks и `git diff --check` прошли.
 - ✅ Opt-in L0 capture экспортирует completed/max-token turns после idle и записывает durable requested/succeeded/failed events; crash-window пока at least once.
-- ⏳ Автоматический L1/L2/L3 recall и live MemoryCore smoke не реализованы.
+- ✅ Opt-in automatic L1 recall выполняется перед первым step, логирует точные citations и fail-open код ошибки, затем добавляет отдельный недоверенный reference context.
+- ⏳ L2/L3 recall и live MemoryCore smoke не реализованы.
 
 ## Следующий шаг
 
-Добавить автоматический логируемый recall через `agent/pre-step`, сохраняя явный `memory_search` как ручной путь и fail-open поведение при недоступности TencentDB.
+Добавить bounded L2/L3 recall и live standalone MemoryCore smoke; после этого закрыть real-composition snapshot для automatic recall.
 
 ## Открытые вопросы
 

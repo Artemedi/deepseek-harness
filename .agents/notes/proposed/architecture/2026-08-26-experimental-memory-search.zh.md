@@ -18,6 +18,8 @@ Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH wo
 
 可选 automatic capture 在 Agent 进入 idle 后，仅导出 completed 或 max-token turn 中的直接用户文本和助手文本。DSH 在远程写入前记录并 flush capture request，随后记录有界的 success 或 failure event。由于进程可能在 TencentDB 接受 turn 后、DSH 记录成功前停止，因此交付语义为 at least once。
 
+可选 automatic recall 在第一个 step 前执行一次，仅从直接用户输入推导 query，并在返回单独的 model-visible reference message 前记录完整 L1 result。该消息明确标记远程 memory 可能过时且不构成指令。Provider failure 会记录安全的错误码，但不会阻塞 model turn。
+
 ## Alternatives considered
 
 **直接把外部结果注入提示词。** 拒绝，因为检索文本会成为无法从会话日志重建的隐藏 model state。

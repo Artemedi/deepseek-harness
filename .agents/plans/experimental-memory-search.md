@@ -50,7 +50,8 @@ rejects events claiming a workspace other than the owning session.
 - [x] Reject an enabled TencentDB route without real connection and isolation configuration.
 - [x] Add an opt-in native retrieval overlay.
 - [x] Add durable L0 capture with requested, succeeded, and safe failed events; delivery remains at least once across the crash window.
-- [ ] Add automatic logged L1/L2/L3 recall before the first model step.
+- [x] Add automatic logged L1 recall before the first model step with fail-open durable failures.
+- [ ] Add bounded L2/L3 recall.
 - [ ] Add a live standalone MemoryCore smoke test.
 
 ## Definition of done
