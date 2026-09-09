@@ -45,10 +45,10 @@ describe('TencentDbHttpProvider', () => {
     }])
   })
 
-  it('uses an unauthenticated loopback Gateway for search and capture', async () => {
+  it('uses the non-secret protocol bearer required by an unprotected loopback Gateway', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({ 'x-tdai-service-id': 'memory-1', 'Content-Type': 'application/json' })
-      expect(Object.keys(init?.headers ?? {})).not.toContain('Authorization')
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer dsh-local-loopback' })
       return String(_input).endsWith('/v3/atomic/search')
         ? response([])
         : new Response(JSON.stringify({ code: 0, message: 'ok', data: {} }), { status: 200 })
@@ -65,7 +65,6 @@ describe('TencentDbHttpProvider', () => {
   })
 
   it.each([
-    'http://localhost:8420',
     'http://127.0.0.2:8420',
     'http://[::1]:8420',
   ])('allows anonymous loopback endpoint %s', (baseUrl) => {
@@ -74,6 +73,7 @@ describe('TencentDbHttpProvider', () => {
 
   it.each([
     'https://memory.example',
+    'http://localhost:8420',
     'http://localhost.example:8420',
     'http://0.0.0.0:8420',
     'http://[::]:8420',
@@ -91,6 +91,13 @@ describe('TencentDbHttpProvider', () => {
       teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
     }, async () => undefined)
     await expect(local.search(request())).rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
+  })
+
+  it('rejects an auth header that collides with fixed protocol headers', () => {
+    expect(() => new TencentDbHttpProvider({
+      baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      authHeader: 'Content-Type',
+    }, async () => undefined)).toThrow('collides with a protocol header')
   })
 
   it('fails closed for missing credentials, HTTP errors, malformed JSON, oversized responses, and cancellation', async () => {

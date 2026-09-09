@@ -8,15 +8,23 @@ import type { TencentDbRecord } from './remote-contract.ts'
 
 /** Configuration for the opt-in TencentDB v3 atomic-search route. */
 export interface TencentDbHttpConfig {
+  /** Absolute TencentDB MemoryCore Gateway origin. */
   readonly baseUrl: string
-  /** Bearer credential; may be omitted only for a loopback Gateway. */
+  /** Validated bearer credential; loopback may omit it and use a non-secret protocol marker. */
   readonly credentialRef?: string
+  /** Memory instance selected by `x-tdai-service-id`. */
   readonly serviceId: string
+  /** Provider-side Team isolation identifier. */
   readonly teamId: string
+  /** Provider-side Agent isolation identifier. */
   readonly agentId: string
+  /** Provider-side User isolation identifier. */
   readonly userId: string
+  /** Header carrying the bearer token. */
   readonly authHeader?: string
+  /** Per-request network timeout in milliseconds. */
   readonly timeoutMs?: number
+  /** Maximum accepted response body size in bytes. */
   readonly maxResponseBytes?: number
 }
 
@@ -56,6 +64,10 @@ export default class TencentDbHttpProvider implements MemoryProvider {
     if (config.teamId.trim().length === 0) throw new HarnessError('TencentDB teamId must not be empty', 'MEMORY_INVALID_REQUEST')
     if (config.agentId.trim().length === 0) throw new HarnessError('TencentDB agentId must not be empty', 'MEMORY_INVALID_REQUEST')
     if (config.userId.trim().length === 0) throw new HarnessError('TencentDB userId must not be empty', 'MEMORY_INVALID_REQUEST')
+    const authHeader = config.authHeader ?? 'Authorization'
+    if (authHeader.trim().length === 0 || ['content-type', 'x-tdai-service-id'].includes(authHeader.toLowerCase())) {
+      throw new HarnessError('TencentDB authHeader is empty or collides with a protocol header', 'MEMORY_INVALID_REQUEST')
+    }
     this.config = {
       baseUrl: baseUrl.href.replace(/\/$/, ''),
       ...(config.credentialRef === undefined ? {} : { credentialRef: config.credentialRef }),
@@ -63,7 +75,7 @@ export default class TencentDbHttpProvider implements MemoryProvider {
       teamId: config.teamId,
       agentId: config.agentId,
       userId: config.userId,
-      authHeader: config.authHeader ?? 'Authorization',
+      authHeader,
       timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxResponseBytes: config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES,
     }
@@ -165,7 +177,10 @@ export default class TencentDbHttpProvider implements MemoryProvider {
   }
 
   private async resolveAuthHeaders(): Promise<Record<string, string>> {
-    if (this.config.credentialRef === undefined) return {}
+    // Upstream v3 parses a mandatory Bearer shape even when standalone
+    // Gateway authentication is disabled. This loopback-only marker carries
+    // no authority; non-loopback endpoints were rejected in the constructor.
+    if (this.config.credentialRef === undefined) return { [this.config.authHeader]: 'Bearer dsh-local-loopback' }
     const secret = await this.resolveCredential(this.config.credentialRef)
     if (secret === undefined) throw new HarnessError('TencentDB credential is not configured', 'MEMORY_UNAUTHORIZED')
     return { [this.config.authHeader]: `Bearer ${secret}` }
@@ -174,7 +189,7 @@ export default class TencentDbHttpProvider implements MemoryProvider {
 
 function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase()
-  if (normalized === 'localhost' || normalized === '[::1]' || normalized === '::1') return true
+  if (normalized === '[::1]' || normalized === '::1') return true
   const segments = normalized.split('.')
   return segments.length === 4
     && segments[0] === '127'

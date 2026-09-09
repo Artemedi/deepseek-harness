@@ -14,7 +14,9 @@ Status: proposed
 
 第一个 provider 只提供 search。它在查询前校验 stale Agent、缺失 workspace、空 query、hit limit 和总字节限制。append-time invariant 拒绝 workspace 与 owning session 不一致的 `memory/search` event。
 
-Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH workspace 转换为 provider tenancy。部署配置提供 memory service、Team、Agent 和 User 标识符；每次搜索都发送该 isolation tuple，并在调用者的 DSH workspace 下记录返回的 L1 atomic-memory citations。Loopback standalone Gateway 可以沿用上游默认配置并关闭 bearer authentication；非 loopback endpoint 必须提供 DSH credential reference。缺少连接、认证或隔离配置时，composition 会被拒绝，而不会选择测试数据。
+Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH workspace 转换为 provider tenancy。部署配置提供 memory service、Team、Agent 和 User 标识符；每次搜索都发送该 isolation tuple，并在调用者的 DSH workspace 下记录返回的 L1 atomic-memory citations。数字 loopback standalone Gateway 可以沿用上游默认配置并关闭 authentication；由于 v3 data-plane parser 强制要求该 header 形式，DSH 仍会发送非秘密 bearer marker。Hostname alias 和非 loopback endpoint 必须提供 DSH credential reference。缺少连接、认证或隔离配置时，composition 会被拒绝，而不会选择测试数据。
+
+可选 managed mode 仅通过 DSH local-host subprocess service 启动由 operator 安装并固定 commit 的 standalone MemoryCore checkout，显式转发现有 DSH LLM credential，并在数字 loopback health endpoint 返回精确 ready envelope 前阻止 service activation。该依赖与 composition 顺序无关；remote execution world 会在 credential resolution 前被拒绝。plugin 拒绝接管任何已有 HTTP listener，并在 unload 和 HMR 时负责终止完整 process tree。配置的 OpenAI-compatible LLM 也可以是本地服务。由于 upstream 尚未发布稳定的 standalone Gateway executable，应用启动过程不会下载或更新 MemoryCore。
 
 可选 automatic capture 在 Agent 进入 idle 后，仅导出 completed 或 max-token turn 中的直接用户文本和助手文本。DSH 在远程写入前记录并 flush capture request，随后记录有界的 success 或 failure event。由于进程可能在 TencentDB 接受 turn 后、DSH 记录成功前停止，因此交付语义为 at least once。
 

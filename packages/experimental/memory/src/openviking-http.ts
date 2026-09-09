@@ -8,10 +8,15 @@ import type { OpenVikingDepth, OpenVikingRecord } from './remote-contract.ts'
 
 /** Configuration for the opt-in OpenViking retrieval route. */
 export interface OpenVikingHttpConfig {
+  /** Absolute OpenViking HTTP service origin. */
   readonly baseUrl: string
+  /** Optional bearer and API-key credential reference. */
   readonly credentialRef?: string
+  /** Per-request network timeout in milliseconds. */
   readonly timeoutMs?: number
+  /** Maximum accepted response body size in bytes. */
   readonly maxResponseBytes?: number
+  /** Optional trusted `viking://` retrieval scope. */
   readonly targetUri?: string
 }
 

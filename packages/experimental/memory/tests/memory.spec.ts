@@ -159,7 +159,7 @@ describe('MemoryService', () => {
 
   it('uses a loopback TencentDB provider without a credentials service', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(Object.keys(init?.headers ?? {})).not.toContain('Authorization')
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer dsh-local-loopback' })
       return new Response(JSON.stringify({ code: 0, message: 'ok', data: {} }), { status: 200 })
     })
     vi.stubGlobal('fetch', fetchMock)

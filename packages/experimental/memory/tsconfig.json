@@ -14,6 +14,7 @@
     { "path": "../../llm/llm" },
     { "path": "../../core/session" },
     { "path": "../../session-query/session-query" },
+    { "path": "../../subprocess/subprocess" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]
 }
