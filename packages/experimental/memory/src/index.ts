@@ -17,6 +17,7 @@ import type { MemoryCaptureMessage, MemoryCaptureRequest, MemoryId, MemoryProvid
 import { normalizeOpenVikingRecords, OPENVIKING_STUB_RECORDS } from './remote-contract.ts'
 import TencentDbHttpProvider, { type TencentDbHttpConfig } from './tencentdb-http.ts'
 import OpenVikingHttpProvider, { type OpenVikingHttpConfig } from './openviking-http.ts'
+import { startTencentDbManagedRuntime, type TencentDbManagedRuntimeConfig } from './tencentdb-runtime.ts'
 
 function MemoryId(id: string): MemoryId {
   return id as MemoryId
@@ -27,6 +28,7 @@ export { normalizeOpenVikingRecords, normalizeTencentDbRecords, remoteFailure } 
 export type { OpenVikingDepth, OpenVikingRecord, RemoteMemoryCitation, RemoteMemoryProvider, RemoteMemorySearchRequest, TencentDbRecord } from './remote-contract.ts'
 export { default as TencentDbHttpProvider } from './tencentdb-http.ts'
 export type { TencentDbCaptureRequest, TencentDbConversationMessage, TencentDbHttpConfig } from './tencentdb-http.ts'
+export type { TencentDbManagedRuntimeConfig } from './tencentdb-runtime.ts'
 export { default as OpenVikingHttpProvider } from './openviking-http.ts'
 export type { OpenVikingHttpConfig } from './openviking-http.ts'
 
@@ -80,6 +82,8 @@ export interface Config {
   readonly providers?: string[]
   /** Explicit TencentDB HTTP provider configuration. */
   readonly tencentdb?: TencentDbHttpConfig
+  /** Start and own an operator-installed local MemoryCore Gateway. */
+  readonly tencentdbRuntime?: TencentDbManagedRuntimeConfig
   /** Explicit OpenViking HTTP provider configuration. */
   readonly openviking?: OpenVikingHttpConfig
   /** Export completed turns to the explicitly configured TencentDB provider. */
@@ -103,6 +107,20 @@ export const Config: z<Config> = z.object({
     authHeader: z.string().default('Authorization'),
     timeoutMs: z.number().step(1).min(1).max(300_000).default(30_000),
     maxResponseBytes: z.number().step(1).min(1).max(16_777_216).default(1_048_576),
+  }).required(false),
+  tencentdbRuntime: z.object({
+    command: z.string(),
+    args: z.array(z.string()).default([]),
+    cwd: z.string(),
+    gatewayConfig: z.string().default('tdai-gateway.standalone.yaml'),
+    dataDir: z.string(),
+    llmCredentialRef: z.string(),
+    llmBaseUrl: z.string(),
+    llmModel: z.string(),
+    startupTimeoutMs: z.number().step(1).min(1).max(300_000).default(30_000),
+    healthPollMs: z.number().step(1).min(1).max(10_000).default(100),
+    killGraceMs: z.number().step(1).min(1).max(60_000).default(5_000),
+    maxOutputBytes: z.number().step(1).min(1).max(16_777_216).default(65_536),
   }).required(false),
   openviking: z.object({
     baseUrl: z.string(),
@@ -130,6 +148,7 @@ export default class MemoryService extends Service {
     readonly defaultMaxContentBytes: number
     readonly providers: string[]
     readonly tencentdb?: TencentDbHttpConfig
+    readonly tencentdbRuntime?: TencentDbManagedRuntimeConfig
     readonly openviking?: OpenVikingHttpConfig
     readonly automaticCapture: boolean
     readonly automaticRecall: boolean
@@ -144,6 +163,7 @@ export default class MemoryService extends Service {
       defaultMaxContentBytes: config.defaultMaxContentBytes ?? 8_192,
       providers: config.providers ?? ['local'],
       ...(config.tencentdb === undefined ? {} : { tencentdb: config.tencentdb }),
+      ...(config.tencentdbRuntime === undefined ? {} : { tencentdbRuntime: config.tencentdbRuntime }),
       ...(config.openviking === undefined ? {} : { openviking: config.openviking }),
       automaticCapture: config.automaticCapture ?? false,
       automaticRecall: config.automaticRecall ?? false,
@@ -159,6 +179,12 @@ export default class MemoryService extends Service {
     ])
     if (this.config.providers.includes('tencentdb') && this.config.tencentdb === undefined) {
       throw new HarnessError('TencentDB provider configuration is required when the route is enabled', 'MEMORY_INVALID_REQUEST')
+    }
+    if (this.config.tencentdbRuntime !== undefined && this.config.tencentdb === undefined) {
+      throw new HarnessError('managed TencentDB MemoryCore requires TencentDB provider configuration', 'MEMORY_INVALID_REQUEST')
+    }
+    if (this.config.tencentdbRuntime !== undefined && !this.config.providers.includes('tencentdb')) {
+      throw new HarnessError('managed TencentDB MemoryCore requires the TencentDB provider route', 'MEMORY_INVALID_REQUEST')
     }
     if (this.config.tencentdb !== undefined) {
       available.set('tencentdb', new TencentDbHttpProvider(this.config.tencentdb, async (ref) => {
@@ -195,6 +221,19 @@ export default class MemoryService extends Service {
         return { kind: 'enter', messages: [recalled, ...decision.messages] }
       }, { prepend: true, global: true })
     }
+  }
+
+  /** Start the configured local MemoryCore process before publishing a ready service. */
+  protected async [Service.init](): Promise<void> {
+    if (this.config.tencentdbRuntime === undefined || this.config.tencentdb === undefined) return
+    const provider = this.config.tencentdb
+    const runtime = this.config.tencentdbRuntime
+    await this.ctx.inject(['subprocess', 'credentials'], async (runtimeCtx) => {
+      await startTencentDbManagedRuntime(runtimeCtx, provider, runtime, async (ref) => {
+        const credentials = runtimeCtx.get('credentials') as CredentialProvider | undefined
+        return (await credentials?.resolve(credentialRef(ref)))?.value
+      })
+    })
   }
 
   /**
@@ -278,7 +317,11 @@ export default class MemoryService extends Service {
     })
   }
 
-  /** Export every completed, not-yet-successful turn in chronological order. */
+  /**
+   * Export every completed, not-yet-successful turn in chronological order.
+   * @param agent - exact live agent whose completed turns are captured.
+   * @param signal - cancellation for the maintenance pass and provider calls.
+   */
   async captureCompletedTurns(agent: Agent, signal: AbortSignal): Promise<void> {
     const succeeded = new Set<number>()
     const completed: number[] = []
@@ -308,7 +351,13 @@ export default class MemoryService extends Service {
     }
   }
 
-  /** Return logged, explicitly untrusted TencentDB context for one proposed first step. */
+  /**
+   * Return logged, explicitly untrusted TencentDB context for one proposed first step.
+   * @param agent - exact live agent receiving recalled context.
+   * @param messages - proposed first-step messages used to derive the direct-user query.
+   * @param signal - cancellation shared with the active agent turn.
+   * @returns a separate reference message, or `undefined` when recall has no usable result.
+   */
   async recallForStep(agent: Agent, messages: readonly UserMessage[], signal: AbortSignal): Promise<UserMessage | undefined> {
     const query = [...messages].reverse()
       .find(message => message.source.kind === 'user')
