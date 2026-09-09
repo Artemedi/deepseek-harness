@@ -36,6 +36,7 @@ Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH wo
 - `memory_search` 在返回 model-visible text 前把完整返回值记录到 `memory/search`。
 - package invariant 拒绝声明 workspace 与 owning session 不同的 event。
 - Loader-composed test 通过已安装的 tool，检查 JSON result 和 durable event。
+- 真实 headless Loader 和 AgentLoop 测试证明，已记录的 TencentDB context 在 model request 中位于直接 prompt 之前。
 - TencentDB request 保留配置的 v3 isolation tuple，校验业务 response envelope，并且启用的 runtime route 绝不暴露 deterministic stub。
 
 ## Risks
