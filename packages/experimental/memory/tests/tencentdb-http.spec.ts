@@ -16,6 +16,15 @@ function provider(resolveCredential: (ref: string) => Promise<string | undefined
   }, resolveCredential)
 }
 
+function anonymousProvider(baseUrl = 'http://127.0.0.1:8420', resolveCredential = vi.fn(async () => undefined)) {
+  return {
+    provider: new TencentDbHttpProvider({
+      baseUrl, serviceId: 'memory-1', teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+    }, resolveCredential),
+    resolveCredential,
+  }
+}
+
 describe('TencentDbHttpProvider', () => {
   afterEach(() => vi.unstubAllGlobals())
 
@@ -34,6 +43,54 @@ describe('TencentDbHttpProvider', () => {
     await expect(provider().search(request())).resolves.toEqual([{
       id: 'tencentdb:opaque-1', kind: 'memory', title: 'preference', content: 'evidence', source: 'tencentdb:atomic:opaque-1',
     }])
+  })
+
+  it('uses an unauthenticated loopback Gateway for search and capture', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ 'x-tdai-service-id': 'memory-1', 'Content-Type': 'application/json' })
+      expect(Object.keys(init?.headers ?? {})).not.toContain('Authorization')
+      return String(_input).endsWith('/v3/atomic/search')
+        ? response([])
+        : new Response(JSON.stringify({ code: 0, message: 'ok', data: {} }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const local = anonymousProvider()
+
+    await expect(local.provider.search(request())).resolves.toEqual([])
+    await expect(local.provider.capture({
+      sessionId: 'session-1', messages: [{ role: 'user', content: 'hello' }], signal: new AbortController().signal,
+    })).resolves.toBeUndefined()
+    expect(local.resolveCredential).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    'http://localhost:8420',
+    'http://127.0.0.2:8420',
+    'http://[::1]:8420',
+  ])('allows anonymous loopback endpoint %s', (baseUrl) => {
+    expect(() => anonymousProvider(baseUrl)).not.toThrow()
+  })
+
+  it.each([
+    'https://memory.example',
+    'http://localhost.example:8420',
+    'http://0.0.0.0:8420',
+    'http://[::]:8420',
+  ])('rejects anonymous non-loopback endpoint %s', (baseUrl) => {
+    expect(() => anonymousProvider(baseUrl)).toThrow('credentialRef is required for a non-loopback Gateway')
+  })
+
+  it('rejects an empty ref and keeps an explicit unresolved loopback ref unauthorized', async () => {
+    expect(() => new TencentDbHttpProvider({
+      baseUrl: 'http://127.0.0.1:8420', credentialRef: ' ', serviceId: 'memory-1',
+      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+    }, async () => undefined)).toThrow('credentialRef must not be empty')
+    const local = new TencentDbHttpProvider({
+      baseUrl: 'http://127.0.0.1:8420', credentialRef: 'MISSING_KEY', serviceId: 'memory-1',
+      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+    }, async () => undefined)
+    await expect(local.search(request())).rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
   })
 
   it('fails closed for missing credentials, HTTP errors, malformed JSON, oversized responses, and cancellation', async () => {

@@ -95,7 +95,7 @@ export const Config: z<Config> = z.object({
   providers: z.array(z.string()).default(['local']),
   tencentdb: z.object({
     baseUrl: z.string(),
-    credentialRef: z.string(),
+    credentialRef: z.string().required(false),
     serviceId: z.string(),
     teamId: z.string(),
     agentId: z.string(),

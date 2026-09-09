@@ -10,14 +10,16 @@
 - ✅ TencentDB L1 search приведён к v3 контракту: `x-tdai-service-id`, Team/Agent/User identifiers, `data.items` и проверка business envelope.
 - ✅ Включённый TencentDB route без реальной конфигурации падает при загрузке; runtime stub удалён.
 - ✅ Добавлен opt-in overlay `integrations/tencentdb-agent-memory/memory.cordis.yml.example`.
-- ✅ Фокусные tests: 17 passed; package TypeScript checks и `git diff --check` прошли.
+- ✅ Фокусные memory/tool-memory tests: 46 passed; package TypeScript checks и `git diff --check` прошли.
 - ✅ Opt-in L0 capture экспортирует completed/max-token turns после idle и записывает durable requested/succeeded/failed events; crash-window пока at least once.
 - ✅ Opt-in automatic L1 recall выполняется перед первым step, логирует точные citations и fail-open код ошибки, затем добавляет отдельный недоверенный reference context.
+- ✅ Standalone Gateway на loopback работает без отдельного bearer key; non-loopback endpoint по-прежнему требует credentialRef.
+- ⏳ DSH пока не устанавливает и не запускает локальный MemoryCore runtime.
 - ⏳ L2/L3 recall и live MemoryCore smoke не реализованы.
 
 ## Следующий шаг
 
-Добавить bounded L2/L3 recall и live standalone MemoryCore smoke; после этого закрыть real-composition snapshot для automatic recall.
+Добавить управляемый локальный MemoryCore runtime и live smoke, затем bounded L2/L3 recall и real-composition snapshot для automatic recall.
 
 ## Открытые вопросы
 

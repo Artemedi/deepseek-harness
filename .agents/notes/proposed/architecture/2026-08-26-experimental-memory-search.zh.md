@@ -14,7 +14,7 @@ Status: proposed
 
 第一个 provider 只提供 search。它在查询前校验 stale Agent、缺失 workspace、空 query、hit limit 和总字节限制。append-time invariant 拒绝 workspace 与 owning session 不一致的 `memory/search` event。
 
-Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH workspace 转换为 provider tenancy。部署配置提供 memory service、Team、Agent 和 User 标识符；每次搜索都发送该 isolation tuple，并在调用者的 DSH workspace 下记录返回的 L1 atomic-memory citations。缺少连接或隔离配置时，composition 会被拒绝，而不会选择测试数据。
+Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH workspace 转换为 provider tenancy。部署配置提供 memory service、Team、Agent 和 User 标识符；每次搜索都发送该 isolation tuple，并在调用者的 DSH workspace 下记录返回的 L1 atomic-memory citations。Loopback standalone Gateway 可以沿用上游默认配置并关闭 bearer authentication；非 loopback endpoint 必须提供 DSH credential reference。缺少连接、认证或隔离配置时，composition 会被拒绝，而不会选择测试数据。
 
 可选 automatic capture 在 Agent 进入 idle 后，仅导出 completed 或 max-token turn 中的直接用户文本和助手文本。DSH 在远程写入前记录并 flush capture request，随后记录有界的 success 或 failure event。由于进程可能在 TencentDB 接受 turn 后、DSH 记录成功前停止，因此交付语义为 at least once。
 

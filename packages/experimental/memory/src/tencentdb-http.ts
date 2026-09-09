@@ -9,7 +9,8 @@ import type { TencentDbRecord } from './remote-contract.ts'
 /** Configuration for the opt-in TencentDB v3 atomic-search route. */
 export interface TencentDbHttpConfig {
   readonly baseUrl: string
-  readonly credentialRef: string
+  /** Bearer credential; may be omitted only for a loopback Gateway. */
+  readonly credentialRef?: string
   readonly serviceId: string
   readonly teamId: string
   readonly agentId: string
@@ -19,7 +20,7 @@ export interface TencentDbHttpConfig {
   readonly maxResponseBytes?: number
 }
 
-type ResolvedConfig = Required<TencentDbHttpConfig>
+type ResolvedConfig = Required<Omit<TencentDbHttpConfig, 'credentialRef'>> & Pick<TencentDbHttpConfig, 'credentialRef'>
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576
@@ -39,14 +40,25 @@ export default class TencentDbHttpProvider implements MemoryProvider {
 
   constructor(config: TencentDbHttpConfig, private readonly resolveCredential: (ref: string) => Promise<string | undefined>) {
     if (config.baseUrl.trim().length === 0) throw new HarnessError('TencentDB baseUrl must not be empty', 'MEMORY_INVALID_REQUEST')
-    if (config.credentialRef.trim().length === 0) throw new HarnessError('TencentDB credentialRef must not be empty', 'MEMORY_INVALID_REQUEST')
+    let baseUrl: URL
+    try {
+      baseUrl = new URL(config.baseUrl)
+    } catch {
+      throw new HarnessError('TencentDB baseUrl must be an absolute URL', 'MEMORY_INVALID_REQUEST')
+    }
+    if (config.credentialRef !== undefined && config.credentialRef.trim().length === 0) {
+      throw new HarnessError('TencentDB credentialRef must not be empty', 'MEMORY_INVALID_REQUEST')
+    }
+    if (config.credentialRef === undefined && !isLoopbackHostname(baseUrl.hostname)) {
+      throw new HarnessError('TencentDB credentialRef is required for a non-loopback Gateway', 'MEMORY_INVALID_REQUEST')
+    }
     if (config.serviceId.trim().length === 0) throw new HarnessError('TencentDB serviceId must not be empty', 'MEMORY_INVALID_REQUEST')
     if (config.teamId.trim().length === 0) throw new HarnessError('TencentDB teamId must not be empty', 'MEMORY_INVALID_REQUEST')
     if (config.agentId.trim().length === 0) throw new HarnessError('TencentDB agentId must not be empty', 'MEMORY_INVALID_REQUEST')
     if (config.userId.trim().length === 0) throw new HarnessError('TencentDB userId must not be empty', 'MEMORY_INVALID_REQUEST')
     this.config = {
-      baseUrl: config.baseUrl.replace(/\/$/, ''),
-      credentialRef: config.credentialRef,
+      baseUrl: baseUrl.href.replace(/\/$/, ''),
+      ...(config.credentialRef === undefined ? {} : { credentialRef: config.credentialRef }),
       serviceId: config.serviceId,
       teamId: config.teamId,
       agentId: config.agentId,
@@ -59,8 +71,8 @@ export default class TencentDbHttpProvider implements MemoryProvider {
 
   async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
     if (request.signal.aborted) throw request.signal.reason
-    const secret = await this.resolveCredential(this.config.credentialRef)
-    if (secret === undefined) throw new HarnessError('TencentDB credential is not configured', 'MEMORY_UNAUTHORIZED')
+    const authHeaders = await this.resolveAuthHeaders()
+    if (request.signal.aborted) throw request.signal.reason
     const controller = new AbortController()
     const deadline = setTimeout(() => controller.abort(new Error('TencentDB request timed out')), this.config.timeoutMs)
     const abort = () => controller.abort(request.signal.reason)
@@ -71,7 +83,7 @@ export default class TencentDbHttpProvider implements MemoryProvider {
         redirect: 'error',
         signal: controller.signal,
         headers: {
-          [this.config.authHeader]: `Bearer ${secret}`,
+          ...authHeaders,
           'x-tdai-service-id': this.config.serviceId,
           'Content-Type': 'application/json',
         },
@@ -121,9 +133,8 @@ export default class TencentDbHttpProvider implements MemoryProvider {
     }
 
     if (request.signal.aborted) throw request.signal.reason
-    const secret = await this.resolveCredential(this.config.credentialRef)
+    const authHeaders = await this.resolveAuthHeaders()
     if (request.signal.aborted) throw request.signal.reason
-    if (secret === undefined) throw new HarnessError('TencentDB credential is not configured', 'MEMORY_UNAUTHORIZED')
     const controller = new AbortController()
     const deadline = setTimeout(() => controller.abort(new Error('TencentDB request timed out')), this.config.timeoutMs)
     const abort = () => controller.abort(request.signal.reason)
@@ -134,7 +145,7 @@ export default class TencentDbHttpProvider implements MemoryProvider {
         redirect: 'error',
         signal: controller.signal,
         headers: {
-          [this.config.authHeader]: `Bearer ${secret}`,
+          ...authHeaders,
           'x-tdai-service-id': this.config.serviceId,
           'Content-Type': 'application/json',
         },
@@ -152,6 +163,22 @@ export default class TencentDbHttpProvider implements MemoryProvider {
       request.signal.removeEventListener('abort', abort)
     }
   }
+
+  private async resolveAuthHeaders(): Promise<Record<string, string>> {
+    if (this.config.credentialRef === undefined) return {}
+    const secret = await this.resolveCredential(this.config.credentialRef)
+    if (secret === undefined) throw new HarnessError('TencentDB credential is not configured', 'MEMORY_UNAUTHORIZED')
+    return { [this.config.authHeader]: `Bearer ${secret}` }
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase()
+  if (normalized === 'localhost' || normalized === '[::1]' || normalized === '::1') return true
+  const segments = normalized.split('.')
+  return segments.length === 4
+    && segments[0] === '127'
+    && segments.every(segment => /^\d{1,3}$/.test(segment) && Number(segment) <= 255)
 }
 
 async function readBoundedBody(response: Response, maxBytes: number): Promise<string> {

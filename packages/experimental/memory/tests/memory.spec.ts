@@ -70,7 +70,7 @@ async function setup(cwd?: string, documentText = 'gateway retry evidence', conf
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
-  if (config?.tencentdb !== undefined) await ctx.plugin(MemoryCredentials, { TENCENT_KEY: 'secret-value' })
+  if (config?.tencentdb?.credentialRef !== undefined) await ctx.plugin(MemoryCredentials, { TENCENT_KEY: 'secret-value' })
   const source = SessionId('memory-source')
   await ctx.plugin(class QueryPlugin extends TestQuery {
     constructor(owner: Context) {
@@ -155,6 +155,36 @@ describe('MemoryService', () => {
     })).resolves.toBeUndefined()
     await ctx.fiber.dispose()
     vi.unstubAllGlobals()
+  })
+
+  it('uses a loopback TencentDB provider without a credentials service', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(Object.keys(init?.headers ?? {})).not.toContain('Authorization')
+      return new Response(JSON.stringify({ code: 0, message: 'ok', data: {} }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'],
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1',
+        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      },
+    })
+    await expect(service.capture(agent, {
+      messages: [{ role: 'user', content: 'remember this' }], signal: new AbortController().signal,
+    })).resolves.toBeUndefined()
+    await ctx.fiber.dispose()
+    vi.unstubAllGlobals()
+  })
+
+  it('rejects an anonymous non-loopback TencentDB provider during composition', async () => {
+    await expect(setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'],
+      tencentdb: {
+        baseUrl: 'https://memory.example', serviceId: 'memory-1',
+        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      },
+    })).rejects.toThrow('credentialRef is required for a non-loopback Gateway')
   })
 
   it('captures a completed turn with durable request and success events', async () => {
