@@ -147,6 +147,7 @@ declare module '@deepseek-ai/dsh-session/types' {
   }
 }
 
+/** Durable provider-neutral result returned by one authorized memory search. */
 export interface MemorySearchResult {
   /** Provider identifier recorded with the durable observation. */
   readonly provider: string

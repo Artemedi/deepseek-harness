@@ -57,7 +57,12 @@ export const OPENVIKING_STUB_RECORDS: readonly OpenVikingRecord[] = [{
   uri: 'viking://stub/retry', title: 'Retry detail', content: 'OpenViking stub retry detail', depth: 'L1',
 }]
 
-/** Map a remote HTTP outcome to a stable DSH failure without retaining provider body text. */
+/**
+ * Map a remote HTTP outcome to a stable DSH failure without retaining provider body text.
+ * @param status - remote HTTP status code.
+ * @param provider - stable provider identifier used in the safe error message.
+ * @returns a typed DSH memory failure.
+ */
 export function remoteFailure(status: number, provider: RemoteMemoryProvider['id']): HarnessError {
   const code = status === 401 || status === 403
     ? 'MEMORY_UNAUTHORIZED'
@@ -69,7 +74,12 @@ export function remoteFailure(status: number, provider: RemoteMemoryProvider['id
   return new HarnessError(`${provider} memory provider returned HTTP ${status}`, code)
 }
 
-/** Normalize a TencentDB response with workspace isolation and byte bounds. */
+/**
+ * Normalize a TencentDB response with workspace isolation and byte bounds.
+ * @param records - validated provider records.
+ * @param request - authorized request carrying result and byte limits.
+ * @returns bounded provider-neutral citations.
+ */
 export function normalizeTencentDbRecords(
   records: readonly TencentDbRecord[],
   request: RemoteMemorySearchRequest,
@@ -80,7 +90,13 @@ export function normalizeTencentDbRecords(
   })), request)
 }
 
-/** Normalize an OpenViking response at one explicit context depth. */
+/**
+ * Normalize an OpenViking response at one explicit context depth.
+ * @param records - validated provider records.
+ * @param depth - explicitly selected OpenViking context depth.
+ * @param request - authorized request carrying result and byte limits.
+ * @returns bounded provider-neutral citations.
+ */
 export function normalizeOpenVikingRecords(
   records: readonly OpenVikingRecord[],
   depth: OpenVikingDepth | undefined,

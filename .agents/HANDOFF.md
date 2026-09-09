@@ -10,16 +10,18 @@
 - ✅ TencentDB L1 search приведён к v3 контракту: `x-tdai-service-id`, Team/Agent/User identifiers, `data.items` и проверка business envelope.
 - ✅ Включённый TencentDB route без реальной конфигурации падает при загрузке; runtime stub удалён.
 - ✅ Добавлен opt-in overlay `integrations/tencentdb-agent-memory/memory.cordis.yml.example`.
-- ✅ Фокусные memory/tool-memory tests: 46 passed; package TypeScript checks и `git diff --check` прошли.
+- ✅ Фокусные memory/tool-memory tests: 52 passed; расширенный subprocess/memory набор: 305 passed, 2 skipped; package TypeScript checks и `git diff --check` прошли.
 - ✅ Opt-in L0 capture экспортирует completed/max-token turns после idle и записывает durable requested/succeeded/failed events; crash-window пока at least once.
 - ✅ Opt-in automatic L1 recall выполняется перед первым step, логирует точные citations и fail-open код ошибки, затем добавляет отдельный недоверенный reference context.
-- ✅ Standalone Gateway на loopback работает без отдельного bearer key; non-loopback endpoint по-прежнему требует credentialRef.
-- ⏳ DSH пока не устанавливает и не запускает локальный MemoryCore runtime.
-- ⏳ L2/L3 recall и live MemoryCore smoke не реализованы.
+- ✅ Standalone Gateway на loopback работает без отдельного bearer secret; DSH отправляет требуемый v3 parser несекретный marker, а non-loopback endpoint требует credentialRef.
+- ✅ `tencentdbRuntime` запускает закреплённый локальный MemoryCore через `ctx.subprocess`, ждёт health и гарантированно завершает дерево при unload/HMR.
+- ✅ Live standalone MemoryCore smoke подтвердил health, L0 capture/query и envelope L1 search endpoint на локальном SQLite; повторяемая команда — `pnpm smoke:tencentdb-memory`.
+- ⚠️ Live L1 pipeline тоже стартует, но фактическая extraction не завершилась: оба доступных OpenAI-compatible LLM credentials в этом окружении вернули exhausted allowance. Локальный LLM endpoint также подходит.
+- ⏳ L2/L3 recall не реализован.
 
 ## Следующий шаг
 
-Добавить управляемый локальный MemoryCore runtime и live smoke, затем bounded L2/L3 recall и real-composition snapshot для automatic recall.
+Добавить bounded L2/L3 recall и real-composition snapshot для automatic recall.
 
 ## Открытые вопросы
 

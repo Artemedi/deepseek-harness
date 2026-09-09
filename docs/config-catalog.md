@@ -617,6 +617,100 @@ export interface Config {
 
 Source: [`packages/experimental/agent-team/src/types.ts:125`](../packages/experimental/agent-team/src/types.ts)
 
+<a id="deepseek-aidsh-experimental-memory"></a>
+
+## `@deepseek-ai/dsh-experimental-memory`
+
+Requires: `agents` · `sessionQuery` · `sessions`
+
+```ts config-catalog
+/** Memory retrieval configuration. */
+export interface Config {
+  /** Default maximum citations returned to an explicit consumer. */
+  readonly defaultLimit?: number
+  /** Default aggregate UTF-8 citation cap. */
+  readonly defaultMaxContentBytes?: number
+  /** Explicitly enabled provider routes; `local` must be included. */
+  readonly providers?: string[]
+  /** Explicit TencentDB HTTP provider configuration. */
+  readonly tencentdb?: TencentDbHttpConfig
+  /** Start and own an operator-installed local MemoryCore Gateway. */
+  readonly tencentdbRuntime?: TencentDbManagedRuntimeConfig
+  /** Explicit OpenViking HTTP provider configuration. */
+  readonly openviking?: OpenVikingHttpConfig
+  /** Export completed turns to the explicitly configured TencentDB provider. */
+  readonly automaticCapture?: boolean
+  /** Recall TencentDB L1 memory before the first step of each turn. */
+  readonly automaticRecall?: boolean
+}
+
+/** Configuration for the opt-in TencentDB v3 atomic-search route. */
+export interface TencentDbHttpConfig {
+  /** Absolute TencentDB MemoryCore Gateway origin. */
+  readonly baseUrl: string
+  /** Validated bearer credential; loopback may omit it and use a non-secret protocol marker. */
+  readonly credentialRef?: string
+  /** Memory instance selected by `x-tdai-service-id`. */
+  readonly serviceId: string
+  /** Provider-side Team isolation identifier. */
+  readonly teamId: string
+  /** Provider-side Agent isolation identifier. */
+  readonly agentId: string
+  /** Provider-side User isolation identifier. */
+  readonly userId: string
+  /** Header carrying the bearer token. */
+  readonly authHeader?: string
+  /** Per-request network timeout in milliseconds. */
+  readonly timeoutMs?: number
+  /** Maximum accepted response body size in bytes. */
+  readonly maxResponseBytes?: number
+}
+
+/** Explicit local MemoryCore process and LLM configuration. */
+export interface TencentDbManagedRuntimeConfig {
+  /** Executable used to start the pinned MemoryCore checkout. */
+  readonly command: string
+  /** Arguments passed without shell interpretation. */
+  readonly args?: string[]
+  /** MemoryCore checkout directory. */
+  readonly cwd: string
+  /** Standalone Gateway YAML or JSON path, interpreted by MemoryCore. */
+  readonly gatewayConfig?: string
+  /** Local SQLite and file storage directory. */
+  readonly dataDir: string
+  /** Existing DSH credential supplied to MemoryCore for extraction and aggregation. */
+  readonly llmCredentialRef: string
+  /** OpenAI-compatible LLM base URL supplied to MemoryCore. */
+  readonly llmBaseUrl: string
+  /** Model name supplied to MemoryCore. */
+  readonly llmModel: string
+  /** Maximum time to wait for `/health`. */
+  readonly startupTimeoutMs?: number
+  /** Delay between failed readiness probes. */
+  readonly healthPollMs?: number
+  /** TERM-to-KILL process-tree grace period. */
+  readonly killGraceMs?: number
+  /** Retained tail cap for each process output stream. */
+  readonly maxOutputBytes?: number
+}
+
+/** Configuration for the opt-in OpenViking retrieval route. */
+export interface OpenVikingHttpConfig {
+  /** Absolute OpenViking HTTP service origin. */
+  readonly baseUrl: string
+  /** Optional bearer and API-key credential reference. */
+  readonly credentialRef?: string
+  /** Per-request network timeout in milliseconds. */
+  readonly timeoutMs?: number
+  /** Maximum accepted response body size in bytes. */
+  readonly maxResponseBytes?: number
+  /** Optional trusted `viking://` retrieval scope. */
+  readonly targetUri?: string
+}
+```
+
+Source: [`packages/experimental/memory/src/index.ts:76`](../packages/experimental/memory/src/index.ts)
+
 <a id="deepseek-aidsh-experimental-tool-agent-team"></a>
 
 ## `@deepseek-ai/dsh-experimental-tool-agent-team`
@@ -3267,6 +3361,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-command-goal` — requires `commands` · `goals` ([`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts))
 - `@deepseek-ai/dsh-commands` ([`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts))
 - `@deepseek-ai/dsh-cordis-client-runner` ([`packages/extensions/cordis-client-runner/src/index.ts`](../packages/extensions/cordis-client-runner/src/index.ts))
+- `@deepseek-ai/dsh-experimental-tool-memory` — requires `memory` · `tools` ([`packages/experimental/tool-memory/src/index.ts`](../packages/experimental/tool-memory/src/index.ts))
 - `@deepseek-ai/dsh-fs-e2b` — requires `e2b` ([`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts))
 - `@deepseek-ai/dsh-fs-observation-policy` ([`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts))
 - `@deepseek-ai/dsh-goal-round-driver` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts))
