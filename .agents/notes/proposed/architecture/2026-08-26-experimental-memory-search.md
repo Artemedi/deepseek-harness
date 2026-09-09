@@ -37,6 +37,7 @@ Optional automatic recall runs once before the first step, derives its query onl
 - The package invariant rejects events that claim a workspace different from the owning session.
 - A Loader-composed test runs the installed tool, observes its JSON result, and observes the durable event.
 - A real headless Loader and AgentLoop test proves that logged TencentDB context precedes the direct prompt in the model request.
+- L0 capture enforces the pinned upstream message bounds and validates every accepted ID, version, and count before recording success.
 - TencentDB requests preserve the configured v3 isolation tuple, validate the business response envelope, and never expose deterministic stubs through an enabled runtime route.
 
 ## Risks

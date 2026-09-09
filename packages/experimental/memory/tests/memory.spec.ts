@@ -140,7 +140,10 @@ describe('MemoryService', () => {
   it('captures through the enabled provider with the live Agent session identity', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toMatchObject({ session_id: 'memory-owner' })
-      return new Response(JSON.stringify({ code: 0, message: 'ok', request_id: 'capture-1', data: {} }), { status: 200 })
+      return new Response(JSON.stringify({
+        code: 0, message: 'ok', request_id: 'capture-1',
+        data: { accepted_ids: ['message-1'], accepted_versions: ['v1'], total_count: 1 },
+      }), { status: 200 })
     })
     vi.stubGlobal('fetch', fetchMock)
     const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
@@ -160,7 +163,10 @@ describe('MemoryService', () => {
   it('uses a loopback TencentDB provider without a credentials service', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({ Authorization: 'Bearer dsh-local-loopback' })
-      return new Response(JSON.stringify({ code: 0, message: 'ok', data: {} }), { status: 200 })
+      return new Response(JSON.stringify({
+        code: 0, message: 'ok',
+        data: { accepted_ids: ['message-1'], accepted_versions: ['v1'], total_count: 1 },
+      }), { status: 200 })
     })
     vi.stubGlobal('fetch', fetchMock)
     const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
@@ -193,7 +199,10 @@ describe('MemoryService', () => {
         session_id: 'memory-owner',
         messages: [{ role: 'user', content: 'remember this' }, { role: 'assistant', content: 'noted' }],
       })
-      return new Response(JSON.stringify({ code: 0, message: 'ok', request_id: 'capture-1', data: {} }), { status: 200 })
+      return new Response(JSON.stringify({
+        code: 0, message: 'ok', request_id: 'capture-1',
+        data: { accepted_ids: ['message-1', 'message-2'], accepted_versions: ['v1', 'v1'], total_count: 2 },
+      }), { status: 200 })
     })
     vi.stubGlobal('fetch', fetchMock)
     const { ctx, agent, service } = await setup('/workspace/a', 'unused', {

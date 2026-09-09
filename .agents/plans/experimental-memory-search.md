@@ -56,6 +56,7 @@ rejects events claiming a workspace other than the owning session.
 - [x] Add bounded L2/L3 recall with explicit upstream scenario/core contracts and a shared automatic-recall budget.
 - [x] Add and run a live standalone MemoryCore v3 health, L0 capture/query, and L1 search smoke test.
 - [x] Prove automatic recall through a real headless Loader, AgentLoop, model request, and persisted event projection.
+- [x] Enforce the pinned L0 capture bounds and validate the complete conversation acceptance result.
 
 ## Definition of done
 

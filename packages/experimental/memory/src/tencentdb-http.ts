@@ -32,7 +32,8 @@ type ResolvedConfig = Required<Omit<TencentDbHttpConfig, 'credentialRef'>> & Pic
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576
-const MAX_CAPTURE_MESSAGES = 256
+const MAX_CAPTURE_MESSAGES = 100
+const MAX_CAPTURE_CONTENT_LENGTH = 8_192
 const MAX_CAPTURE_BYTES = 1_048_576
 
 /** One text message accepted by TencentDB's v3 conversation-ingest route. */
@@ -131,6 +132,9 @@ export default class TencentDbHttpProvider implements MemoryProvider {
       if ((message.role !== 'user' && message.role !== 'assistant') || typeof message.content !== 'string' || message.content.trim().length === 0) {
         throw new HarnessError(`TencentDB capture message ${String(index)} is malformed`, 'MEMORY_INVALID_REQUEST')
       }
+      if (message.content.length > MAX_CAPTURE_CONTENT_LENGTH) {
+        throw new HarnessError(`TencentDB capture message ${String(index)} exceeds the content length limit`, 'MEMORY_INVALID_REQUEST')
+      }
     }
     const payload = {
       team_id: this.config.teamId,
@@ -144,7 +148,15 @@ export default class TencentDbHttpProvider implements MemoryProvider {
       throw new HarnessError('TencentDB capture exceeds the request byte limit', 'MEMORY_INVALID_REQUEST')
     }
 
-    await this.post('/v3/conversation/add', payload, request.signal)
+    const value = await this.post('/v3/conversation/add', payload, request.signal)
+    const data = envelopeData(value)
+    if (!Array.isArray(data.accepted_ids) || !data.accepted_ids.every(id => typeof id === 'string' && id.length > 0)
+      || !Array.isArray(data.accepted_versions) || !data.accepted_versions.every(version => typeof version === 'string' && version.length > 0)
+      || data.accepted_ids.length !== request.messages.length
+      || data.accepted_versions.length !== request.messages.length
+      || data.total_count !== request.messages.length) {
+      throw malformed('TencentDB capture response is malformed')
+    }
   }
 
   private isolation(): Record<string, string> {

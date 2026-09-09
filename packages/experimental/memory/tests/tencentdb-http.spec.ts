@@ -120,7 +120,10 @@ describe('TencentDbHttpProvider', () => {
       expect(init?.headers).toMatchObject({ Authorization: 'Bearer dsh-local-loopback' })
       return String(_input).endsWith('/v3/atomic/search')
         ? response([])
-        : new Response(JSON.stringify({ code: 0, message: 'ok', data: {} }), { status: 200 })
+        : new Response(JSON.stringify({
+          code: 0, message: 'ok',
+          data: { accepted_ids: ['message-1'], accepted_versions: ['v1'], total_count: 1 },
+        }), { status: 200 })
     })
     vi.stubGlobal('fetch', fetchMock)
     const local = anonymousProvider()
@@ -221,7 +224,10 @@ describe('TencentDbHttpProvider', () => {
         team_id: 'team-1', agent_id: 'agent-1', user_id: 'user-1', session_id: 'dsh-session-1',
         messages: [{ role: 'user', content: 'remember this' }, { role: 'assistant', content: 'noted' }],
       })
-      return new Response(JSON.stringify({ code: 0, message: 'ok', request_id: 'capture-1', data: {} }), { status: 200 })
+      return new Response(JSON.stringify({
+        code: 0, message: 'ok', request_id: 'capture-1',
+        data: { accepted_ids: ['message-1', 'message-2'], accepted_versions: ['v1', 'v1'], total_count: 2 },
+      }), { status: 200 })
     })
     vi.stubGlobal('fetch', fetchMock)
 
@@ -266,13 +272,28 @@ describe('TencentDbHttpProvider', () => {
 
   it('bounds capture request and response sizes', async () => {
     await expect(provider().capture({
-      sessionId: 'session-1', messages: Array.from({ length: 257 }, () => ({ role: 'user', content: 'x' })),
+      sessionId: 'session-1', messages: Array.from({ length: 101 }, () => ({ role: 'user', content: 'x' })),
       signal: new AbortController().signal,
     })).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await expect(provider().capture({
-      sessionId: 'session-1', messages: [{ role: 'user', content: 'x'.repeat(1_048_576) }],
+      sessionId: 'session-1', messages: [{ role: 'user', content: 'x'.repeat(8_193) }],
       signal: new AbortController().signal,
     })).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+
+    const boundaryMessages = Array.from({ length: 100 }, (_, index) => ({
+      role: 'user' as const, content: index === 0 ? 'x'.repeat(8_192) : 'x',
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      code: 0, message: 'ok', request_id: 'capture-boundary',
+      data: {
+        accepted_ids: boundaryMessages.map((_, index) => `message-${String(index)}`),
+        accepted_versions: boundaryMessages.map(() => 'v1'),
+        total_count: boundaryMessages.length,
+      },
+    }), { status: 200 })))
+    await expect(provider().capture({
+      sessionId: 'session-1', messages: boundaryMessages, signal: new AbortController().signal,
+    })).resolves.toBeUndefined()
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response('1234567890', { status: 200 })))
     const bounded = new TencentDbHttpProvider({
@@ -282,5 +303,21 @@ describe('TencentDbHttpProvider', () => {
     await expect(bounded.capture({
       sessionId: 'session-1', messages: [{ role: 'assistant', content: 'ok' }], signal: new AbortController().signal,
     })).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+  })
+
+  it('rejects malformed conversation acceptance details', async () => {
+    const capture = () => provider().capture({
+      sessionId: 'session-1', messages: [{ role: 'user', content: 'hello' }],
+      signal: new AbortController().signal,
+    })
+    for (const data of [
+      {},
+      { accepted_ids: [], accepted_versions: [], total_count: 0 },
+      { accepted_ids: ['message-1'], accepted_versions: [], total_count: 1 },
+      { accepted_ids: ['message-1'], accepted_versions: ['v1'], total_count: 2 },
+    ]) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 0, data }), { status: 200 })))
+      await expect(capture()).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+    }
   })
 })

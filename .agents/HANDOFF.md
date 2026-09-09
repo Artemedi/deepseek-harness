@@ -10,7 +10,7 @@
 - ✅ TencentDB L1 search приведён к v3 контракту: `x-tdai-service-id`, Team/Agent/User identifiers, `data.items` и проверка business envelope.
 - ✅ Включённый TencentDB route без реальной конфигурации падает при загрузке; runtime stub удалён.
 - ✅ Добавлен opt-in overlay `integrations/tencentdb-agent-memory/memory.cordis.yml.example`.
-- ✅ Фокусные memory/tool-memory tests: 59 passed; расширенный subprocess/memory набор до managed-runtime коммита: 305 passed, 2 skipped; package TypeScript checks и `git diff --check` прошли.
+- ✅ Фокусные memory/tool-memory tests: 60 passed; расширенный subprocess/memory набор до managed-runtime коммита: 305 passed, 2 skipped; package TypeScript checks и `git diff --check` прошли.
 - ✅ Opt-in L0 capture экспортирует completed/max-token turns после idle и записывает durable requested/succeeded/failed events; crash-window пока at least once.
 - ✅ Opt-in automatic L1 recall выполняется перед первым step, логирует точные citations и fail-open код ошибки, затем добавляет отдельный недоверенный reference context.
 - ✅ Standalone Gateway на loopback работает без отдельного bearer secret; DSH отправляет требуемый v3 parser несекретный marker, а non-loopback endpoint требует credentialRef.
@@ -19,6 +19,7 @@
 - ⚠️ Live L1 pipeline тоже стартует, но фактическая extraction не завершилась: оба доступных OpenAI-compatible LLM credentials в этом окружении вернули exhausted allowance. Локальный LLM endpoint также подходит.
 - ✅ Explicit и automatic TencentDB recall поддерживают L1–L3: L2 идёт через bounded `scenario/ls` + query-matched `scenario/read`, L3 — через singleton `core/read`; слои делят общий hit/byte budget.
 - ✅ Real headless Loader/AgentLoop e2e доказывает, что `memory/search` записан, а недоверенный TencentDB snapshot фактически попадает в model request перед direct user prompt.
+- ✅ L0 capture соблюдает upstream bounds 100×8192 и проверяет полный acceptance result; delivery честно остаётся at least once, потому что pinned upstream не принимает idempotency key или client message ID.
 
 ## Следующий шаг
 
@@ -27,7 +28,7 @@
 ## Открытые вопросы
 
 - Определить отображение DSH user/team/agent identities на TencentDB isolation вместо единственного статического tuple для всего deployment.
-- Выбрать at-least-once idempotency: deterministic message IDs или отдельный provider-supported key.
+- Для exactly-once capture нужен upstream `Idempotency-Key` или client message ID с атомарной уникальностью; deterministic key DSH должен включать session UUID, turn и digest canonical payload.
 - Зафиксировать fail-open policy для recall outage и bounded durable diagnostic.
 
 ## Грабли
