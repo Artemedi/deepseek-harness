@@ -40,11 +40,19 @@ if (!Array.isArray(stored.data?.messages) || stored.data.messages.length !== 2) 
 
 const search = await post('/v3/atomic/search', { ...isolation, query: 'live smoke marker', limit: 5 })
 if (!Array.isArray(search.data?.items)) throw new Error('MemoryCore L1 search response has no items array')
+const scenarios = await post('/v3/scenario/ls', isolation)
+if (!Array.isArray(scenarios.data?.entries)) throw new Error('MemoryCore L2 list response has no entries array')
+const core = await post('/v3/core/read', isolation)
+if (core.data?.content !== null && typeof core.data?.content !== 'string') {
+  throw new Error('MemoryCore L3 read response has malformed content')
+}
 await post('/v3/conversation/delete', { ...isolation, session_ids: [sessionId] })
 
 console.log(JSON.stringify({
   health: 'ok', capture: 'ok', l0Count: stored.data.messages.length,
-  l1SearchEnvelope: 'ok', l1Count: search.data.items.length, cleanup: 'ok',
+  l1SearchEnvelope: 'ok', l1Count: search.data.items.length,
+  l2ListEnvelope: 'ok', l2Count: scenarios.data.entries.length,
+  l3ReadEnvelope: 'ok', l3Present: typeof core.data.content === 'string', cleanup: 'ok',
 }))
 
 async function post(path, body) {

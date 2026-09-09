@@ -6,6 +6,9 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 /** Identifies one replayable citation derived from a session event. */
 export type MemoryId = Branded<'MemoryId'>
 
+/** Explicit provider memory layer. */
+export type MemoryDepth = 'L0' | 'L1' | 'L2' | 'L3'
+
 /** One model-visible citation returned by the local session-history provider. */
 export interface MemoryHit {
   /** Stable local identity formed from the source session and event sequence. */
@@ -36,8 +39,8 @@ export interface MemorySearchRequest {
   readonly maxContentBytes?: number
   /** Explicit provider route; local is the default. */
   readonly provider?: 'local' | 'tencentdb' | 'openviking'
-  /** Required when provider is OpenViking. */
-  readonly depth?: 'L0' | 'L1' | 'L2'
+  /** Provider layer: OpenViking requires L0-L2; TencentDB defaults to L1 and accepts L1-L3. */
+  readonly depth?: MemoryDepth
   /** Cancellation for corpus reads. */
   readonly signal: AbortSignal
 }
@@ -52,8 +55,8 @@ export interface MemoryProviderSearchRequest {
   readonly limit: number
   /** Validated aggregate UTF-8 byte bound. */
   readonly maxContentBytes: number
-  /** Explicit OpenViking retrieval depth, required by that provider. */
-  readonly depth?: 'L0' | 'L1' | 'L2'
+  /** Explicit provider retrieval layer. */
+  readonly depth?: MemoryDepth
   /** Cancellation owned by the calling operation. */
   readonly signal: AbortSignal
 }
@@ -94,7 +97,7 @@ export interface ResolvedMemorySearchSpec {
   readonly query: string
   readonly limit: number
   readonly maxContentBytes: number
-  readonly depth?: 'L0' | 'L1' | 'L2'
+  readonly depth?: MemoryDepth
   readonly signal: AbortSignal
 }
 
@@ -133,6 +136,7 @@ export interface MemoryRecallFailedEvent {
   readonly version: 1
   readonly provider: 'tencentdb'
   readonly code: string
+  readonly depth?: 'L1' | 'L2' | 'L3'
 }
 
 /** Merge-extensible durable memory event map. */

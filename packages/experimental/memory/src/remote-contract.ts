@@ -1,7 +1,7 @@
 /** Local contract and response normalizers for future remote memory adapters. */
 
 import { HarnessError } from '@deepseek-ai/dsh-llm'
-import type { MemoryId } from './types.ts'
+import type { MemoryDepth, MemoryId } from './types.ts'
 
 /** Explicit OpenViking context depth. */
 export type OpenVikingDepth = 'L0' | 'L1' | 'L2'
@@ -12,7 +12,7 @@ export interface RemoteMemorySearchRequest {
   readonly query: string
   readonly limit: number
   readonly maxContentBytes: number
-  readonly depth?: OpenVikingDepth
+  readonly depth?: MemoryDepth
   readonly signal: AbortSignal
 }
 
@@ -99,10 +99,11 @@ export function normalizeTencentDbRecords(
  */
 export function normalizeOpenVikingRecords(
   records: readonly OpenVikingRecord[],
-  depth: OpenVikingDepth | undefined,
+  depth: MemoryDepth | undefined,
   request: RemoteMemorySearchRequest,
 ): readonly RemoteMemoryCitation[] {
   if (depth === undefined) throw new HarnessError('OpenViking retrieval depth is required', 'MEMORY_INVALID_REQUEST')
+  if (depth === 'L3') throw new HarnessError('OpenViking retrieval depth must be L0, L1, or L2', 'MEMORY_INVALID_REQUEST')
   const selected = records.filter(record => record.depth === depth).map(record => ({
     id: memoryId(`openviking:${record.uri}`), kind: 'resource' as const, title: record.title,
     source: record.uri, content: record.content,

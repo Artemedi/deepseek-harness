@@ -262,7 +262,60 @@ describe('MemoryService', () => {
       content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' },
     })], new AbortController().signal)).resolves.toBeUndefined()
     expect(agent.session.events.findLast(event => event.type === 'memory/recall-failed')?.data)
-      .toEqual({ version: 1, provider: 'tencentdb', code: 'MEMORY_PROVIDER_UNAVAILABLE' })
+      .toEqual({ version: 1, provider: 'tencentdb', code: 'MEMORY_PROVIDER_UNAVAILABLE', depth: 'L1' })
+    await ctx.fiber.dispose()
+    vi.unstubAllGlobals()
+  })
+
+  it('combines configured TencentDB recall layers under one result bound', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const data = String(input).endsWith('/v3/atomic/search')
+        ? { items: [{ id: 'fact-1', type: 'preference', content: 'Use pnpm.' }] }
+        : { content: 'Keep answers concise.' }
+      return new Response(JSON.stringify({ code: 0, data }), { status: 200 })
+    }))
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticRecall: true, automaticRecallDepths: ['L1', 'L3'], defaultLimit: 2,
+      tencentdb: {
+        baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      },
+    })
+    const recalled = await service.recallForStep(agent, [createUserMessage({
+      content: [{ type: 'text', text: 'How should I respond?' }], source: { kind: 'user' },
+    })], new AbortController().signal)
+    expect(agent.session.events.findLast(event => event.type === 'memory/search')?.data.hits)
+      .toMatchObject([{ source: 'tencentdb:atomic:fact-1' }, { source: 'tencentdb:core:persona' }])
+    expect(recalled?.content).toMatchObject([{ type: 'text', text: expect.stringContaining('Keep answers concise.') }])
+    await ctx.fiber.dispose()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps successful recall layers when L2 fails and exhausts the shared UTF-8 budget exactly', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname
+      if (path === '/v3/scenario/ls') return new Response('', { status: 503 })
+      const data = path === '/v3/atomic/search'
+        ? { items: [{ id: 'fact-1', type: 'fact', content: 'é' }] }
+        : { content: 'abc' }
+      return new Response(JSON.stringify({ code: 0, data }), { status: 200 })
+    }))
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticRecall: true,
+      automaticRecallDepths: ['L1', 'L2', 'L3'], defaultLimit: 3, defaultMaxContentBytes: 5,
+      tencentdb: {
+        baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      },
+    })
+    await expect(service.recallForStep(agent, [createUserMessage({
+      content: [{ type: 'text', text: 'q' }], source: { kind: 'user' },
+    })], new AbortController().signal)).resolves.toBeDefined()
+    expect(agent.session.events.filter(event => event.type === 'memory/recall-failed').map(event => event.data))
+      .toEqual([{ version: 1, provider: 'tencentdb', code: 'MEMORY_PROVIDER_UNAVAILABLE', depth: 'L2' }])
+    expect(agent.session.events.filter(event => event.type === 'memory/search')).toHaveLength(1)
+    expect(agent.session.events.findLast(event => event.type === 'memory/search')?.data.hits)
+      .toHaveLength(2)
     await ctx.fiber.dispose()
     vi.unstubAllGlobals()
   })

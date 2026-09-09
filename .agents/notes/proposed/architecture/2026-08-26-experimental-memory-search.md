@@ -20,7 +20,7 @@ Optional managed mode launches an operator-installed, commit-pinned standalone M
 
 Optional automatic capture exports only direct user text and assistant text from completed or max-token turns after the Agent becomes idle. DSH records and flushes a capture request before the remote write, then records a bounded success or failure event. Delivery is at least once because a process can stop after TencentDB accepts the turn but before DSH records success.
 
-Optional automatic recall runs once before the first step, derives its query only from direct user input, and records the exact L1 result before returning a separate model-visible reference message. The message labels remote memory as potentially stale and non-instructional. Provider failure records a safe code and does not block the model turn.
+Optional automatic recall runs once before the first step, derives its query only from direct user input, and records the exact combined result before returning a separate model-visible reference message. It defaults to L1; deployments may opt into L2 and L3, which share one aggregate hit and byte budget. L2 uses the upstream scenario listing, ranks bounded path and summary metadata by literal query matches, and reads only selected profiles; L3 reads the singleton core profile. The message labels remote memory as potentially stale and non-instructional. A layer failure records a safe code and does not discard successful layers or block the model turn.
 
 ## Alternatives considered
 
@@ -40,4 +40,4 @@ Optional automatic recall runs once before the first step, derives its query onl
 
 ## Risks
 
-The local provider searches only session history. TencentDB retrieval is explicit L1 search; automatic recall, conversation capture, memory storage, L2/L3 context, and OpenViking require provider-specific authorization, response bounds, failure behavior, and durable event semantics before model use.
+The local provider searches only session history. TencentDB L2 does not expose a semantic search endpoint, so DSH matches only bounded scenario path and summary metadata before selected reads; it never scans every scenario body. All remote layers require provider-specific authorization, response bounds, failure behavior, and durable event semantics before model use.

@@ -26,7 +26,10 @@ function anonymousProvider(baseUrl = 'http://127.0.0.1:8420', resolveCredential 
 }
 
 describe('TencentDbHttpProvider', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
 
   it('sends an explicit scoped v3 search and normalizes bounded citations', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -43,6 +46,72 @@ describe('TencentDbHttpProvider', () => {
     await expect(provider().search(request())).resolves.toEqual([{
       id: 'tencentdb:opaque-1', kind: 'memory', title: 'preference', content: 'evidence', source: 'tencentdb:atomic:opaque-1',
     }])
+  })
+
+  it('retrieves only query-matched L2 scenarios through bounded list and read calls', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      expect(body).toMatchObject({ team_id: 'team-1', agent_id: 'agent-1', user_id: 'user-1' })
+      if (path === '/v3/scenario/ls') {
+        return new Response(JSON.stringify({ code: 0, data: { entries: [
+          { path: 'retry/', summary: 'Retry directory' },
+          { path: 'deploy.md', summary: 'Production retry procedure' },
+          { path: 'style.md', summary: 'Writing preferences' },
+        ] } }), { status: 200 })
+      }
+      expect(path).toBe('/v3/scenario/read')
+      expect(body.path).toBe('deploy.md')
+      return new Response(JSON.stringify({ code: 0, data: { path: 'deploy.md', content: 'Retry production deploy once.' } }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(provider().search({ ...request(), depth: 'L2' })).resolves.toEqual([{
+      id: 'tencentdb:scenario:deploy.md', kind: 'memory', title: 'Production retry procedure',
+      content: 'Retry production deploy once.', source: 'tencentdb:scenario:deploy.md',
+    }])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('applies one timeout to the complete multi-request L2 search', async () => {
+    vi.useFakeTimers()
+    let reads = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/v3/scenario/ls')) {
+        return new Response(JSON.stringify({ code: 0, data: { entries: [
+          { path: 'retry-a.md', summary: 'retry a' }, { path: 'retry-b.md', summary: 'retry b' },
+        ] } }), { status: 200 })
+      }
+      reads += 1
+      if (reads === 1) {
+        return new Promise(resolve => setTimeout(() => resolve(new Response(JSON.stringify({
+          code: 0, data: { content: 'first' },
+        }), { status: 200 })), 20))
+      }
+      return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true }))
+    }))
+    const timed = new TencentDbHttpProvider({
+      baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1', timeoutMs: 30,
+    }, async () => 'secret')
+    const pending = timed.search({ ...request(), depth: 'L2' })
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'MEMORY_RETRYABLE' })
+    await vi.advanceTimersByTimeAsync(20)
+    await vi.advanceTimersByTimeAsync(10)
+    await rejected
+  })
+
+  it('retrieves the singleton L3 core profile and handles an absent profile', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      code: 0, data: { content: 'User prefers concise answers.' },
+    }), { status: 200 })))
+    await expect(provider().search({ ...request(), depth: 'L3' })).resolves.toEqual([{
+      id: 'tencentdb:core:persona', kind: 'memory', title: 'Core memory',
+      content: 'User prefers concise answers.', source: 'tencentdb:core:persona',
+    }])
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 0, data: { content: null } }), { status: 200 })))
+    await expect(provider().search({ ...request(), depth: 'L3' })).resolves.toEqual([])
   })
 
   it('uses the non-secret protocol bearer required by an unprotected loopback Gateway', async () => {

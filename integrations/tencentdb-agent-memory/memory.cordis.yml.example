@@ -10,6 +10,9 @@
         providers: [local, tencentdb]
         automaticCapture: true
         automaticRecall: true
+        # Default is [L1]. Add L2/L3 only when the upstream pipelines produce
+        # scenario and core profiles; all layers share one result/byte budget.
+        automaticRecallDepths: [L1, L2, L3]
         tencentdb:
           baseUrl: http://127.0.0.1:8420
           # credentialRef: TDAI_MEMORY_API_KEY

@@ -20,7 +20,7 @@ Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH wo
 
 可选 automatic capture 在 Agent 进入 idle 后，仅导出 completed 或 max-token turn 中的直接用户文本和助手文本。DSH 在远程写入前记录并 flush capture request，随后记录有界的 success 或 failure event。由于进程可能在 TencentDB 接受 turn 后、DSH 记录成功前停止，因此交付语义为 at least once。
 
-可选 automatic recall 在第一个 step 前执行一次，仅从直接用户输入推导 query，并在返回单独的 model-visible reference message 前记录完整 L1 result。该消息明确标记远程 memory 可能过时且不构成指令。Provider failure 会记录安全的错误码，但不会阻塞 model turn。
+可选 automatic recall 在第一个 step 前执行一次，仅从直接用户输入推导 query，并在返回单独的 model-visible reference message 前记录精确的合并结果。默认只使用 L1；部署可选择 L2 和 L3，且所有层共享一个总 hit 与 byte budget。L2 使用上游 scenario listing，按 literal query 对有界的 path 和 summary metadata 排序，并仅读取选中的 profile；L3 读取单一 core profile。该消息明确标记远程 memory 可能过时且不构成指令。某一层失败会记录安全错误码，但不会丢弃成功层或阻塞 model turn。
 
 ## Alternatives considered
 
@@ -40,4 +40,4 @@ Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH wo
 
 ## Risks
 
-Local provider 只搜索 session history。TencentDB retrieval 是显式 L1 search；自动 recall、conversation capture、memory storage、L2/L3 context 和 OpenViking 需要为每个 provider 先定义 authorization、response bounds、failure behavior 和 durable event semantics。
+Local provider 只搜索 session history。TencentDB L2 没有提供 semantic search endpoint，因此 DSH 只在有界的 scenario path 和 summary metadata 上匹配，再读取选中项；它不会扫描每个 scenario body。所有远程层都必须在 model 使用前定义 provider-specific authorization、response bounds、failure behavior 和 durable event semantics。

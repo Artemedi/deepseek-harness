@@ -83,42 +83,41 @@ export default class TencentDbHttpProvider implements MemoryProvider {
 
   async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
     if (request.signal.aborted) throw request.signal.reason
-    const authHeaders = await this.resolveAuthHeaders()
-    if (request.signal.aborted) throw request.signal.reason
     const controller = new AbortController()
-    const deadline = setTimeout(() => controller.abort(new Error('TencentDB request timed out')), this.config.timeoutMs)
-    const abort = () => controller.abort(request.signal.reason)
+    const deadline = setTimeout(() => controller.abort(new Error('TencentDB search timed out')), this.config.timeoutMs)
+    const abort = (): void => controller.abort(request.signal.reason)
     request.signal.addEventListener('abort', abort, { once: true })
     try {
-      const response = await fetch(`${this.config.baseUrl}/v3/atomic/search`, {
-        method: 'POST',
-        redirect: 'error',
-        signal: controller.signal,
-        headers: {
-          ...authHeaders,
-          'x-tdai-service-id': this.config.serviceId,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          team_id: this.config.teamId,
-          agent_id: this.config.agentId,
-          user_id: this.config.userId,
-          query: request.query,
-          limit: request.limit,
-        }),
-      })
-      if (!response.ok) throw remoteFailure(response.status, 'tencentdb')
-      const raw = await readBoundedBody(response, this.config.maxResponseBytes)
-      return normalizeTencentDbRecords(parseRecords(raw), request)
+      return await this.searchAtDepth({ ...request, signal: controller.signal })
     } catch (error: unknown) {
       if (error instanceof HarnessError) throw error
       if (request.signal.aborted) throw request.signal.reason
-      if (controller.signal.aborted) throw new HarnessError('TencentDB request timed out', 'MEMORY_RETRYABLE')
-      throw new HarnessError('TencentDB provider request failed', 'MEMORY_PROVIDER_UNAVAILABLE')
+      if (controller.signal.aborted) throw new HarnessError('TencentDB search timed out', 'MEMORY_RETRYABLE')
+      throw error
     } finally {
       clearTimeout(deadline)
       request.signal.removeEventListener('abort', abort)
     }
+  }
+
+  private async searchAtDepth(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
+    const isolation = this.isolation()
+    const depth = request.depth ?? 'L1'
+    if (depth === 'L1') {
+      const value = await this.post('/v3/atomic/search', { ...isolation, query: request.query, limit: request.limit }, request.signal)
+      return normalizeTencentDbRecords(parseAtomicRecords(value), request)
+    }
+    if (depth === 'L2') return this.searchScenarios(request, isolation)
+    if (depth === 'L3') {
+      const value = await this.post('/v3/core/read', isolation, request.signal)
+      const data = envelopeData(value)
+      if (data.content === null) return []
+      if (typeof data.content !== 'string') throw malformed('TencentDB core response is malformed')
+      return normalizeTencentDbRecords([{
+        id: 'core:persona', kind: 'memory', title: 'Core memory', content: data.content, source: 'tencentdb:core:persona',
+      }], request)
+    }
+    throw new HarnessError('TencentDB retrieval depth must be L1, L2, or L3', 'MEMORY_INVALID_REQUEST')
   }
 
   /** Persists a bounded completed conversation slice for asynchronous memory extraction. */
@@ -133,46 +132,73 @@ export default class TencentDbHttpProvider implements MemoryProvider {
         throw new HarnessError(`TencentDB capture message ${String(index)} is malformed`, 'MEMORY_INVALID_REQUEST')
       }
     }
-    const body = JSON.stringify({
+    const payload = {
       team_id: this.config.teamId,
       agent_id: this.config.agentId,
       user_id: this.config.userId,
       session_id: sessionId,
       messages: request.messages,
-    })
+    }
+    const body = JSON.stringify(payload)
     if (Buffer.byteLength(body, 'utf8') > MAX_CAPTURE_BYTES) {
       throw new HarnessError('TencentDB capture exceeds the request byte limit', 'MEMORY_INVALID_REQUEST')
     }
 
-    if (request.signal.aborted) throw request.signal.reason
+    await this.post('/v3/conversation/add', payload, request.signal)
+  }
+
+  private isolation(): Record<string, string> {
+    return { team_id: this.config.teamId, agent_id: this.config.agentId, user_id: this.config.userId }
+  }
+
+  private async searchScenarios(
+    request: MemoryProviderSearchRequest,
+    isolation: Record<string, string>,
+  ): Promise<readonly MemorySearchResult['hits'][number][]> {
+    const listed = await this.post('/v3/scenario/ls', isolation, request.signal)
+    const entries = parseScenarioEntries(listed)
+      .map(entry => ({ ...entry, score: scenarioScore(entry, request.query) }))
+      .filter(entry => entry.score > 0)
+      .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+      .slice(0, request.limit)
+    const records: TencentDbRecord[] = []
+    for (const entry of entries) {
+      const value = await this.post('/v3/scenario/read', { ...isolation, path: entry.path }, request.signal)
+      const data = envelopeData(value)
+      if (data.content === null) continue
+      if (typeof data.content !== 'string') throw malformed('TencentDB scenario response is malformed')
+      records.push({
+        id: `scenario:${entry.path}`, kind: 'memory', title: entry.summary ?? entry.path,
+        content: data.content, source: `tencentdb:scenario:${entry.path}`,
+      })
+    }
+    return normalizeTencentDbRecords(records, request)
+  }
+
+  private async post(path: string, body: Record<string, unknown>, signal: AbortSignal): Promise<Record<string, unknown>> {
+    if (signal.aborted) throw signal.reason
     const authHeaders = await this.resolveAuthHeaders()
-    if (request.signal.aborted) throw request.signal.reason
+    if (signal.aborted) throw signal.reason
     const controller = new AbortController()
     const deadline = setTimeout(() => controller.abort(new Error('TencentDB request timed out')), this.config.timeoutMs)
-    const abort = () => controller.abort(request.signal.reason)
-    request.signal.addEventListener('abort', abort, { once: true })
+    const abort = (): void => controller.abort(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
     try {
-      const response = await fetch(`${this.config.baseUrl}/v3/conversation/add`, {
-        method: 'POST',
-        redirect: 'error',
-        signal: controller.signal,
-        headers: {
-          ...authHeaders,
-          'x-tdai-service-id': this.config.serviceId,
-          'Content-Type': 'application/json',
-        },
-        body,
+      const response = await fetch(`${this.config.baseUrl}${path}`, {
+        method: 'POST', redirect: 'error', signal: controller.signal,
+        headers: { ...authHeaders, 'x-tdai-service-id': this.config.serviceId, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       })
       if (!response.ok) throw remoteFailure(response.status, 'tencentdb')
-      parseSuccessEnvelope(await readBoundedBody(response, this.config.maxResponseBytes))
+      return parseSuccessEnvelope(await readBoundedBody(response, this.config.maxResponseBytes))
     } catch (error: unknown) {
       if (error instanceof HarnessError) throw error
-      if (request.signal.aborted) throw request.signal.reason
+      if (signal.aborted) throw signal.reason
       if (controller.signal.aborted) throw new HarnessError('TencentDB request timed out', 'MEMORY_RETRYABLE')
       throw new HarnessError('TencentDB provider request failed', 'MEMORY_PROVIDER_UNAVAILABLE')
     } finally {
       clearTimeout(deadline)
-      request.signal.removeEventListener('abort', abort)
+      signal.removeEventListener('abort', abort)
     }
   }
 
@@ -204,8 +230,7 @@ async function readBoundedBody(response: Response, maxBytes: number): Promise<st
   return Buffer.from(bytes).toString('utf8')
 }
 
-function parseRecords(raw: string): readonly TencentDbRecord[] {
-  const value = parseSuccessEnvelope(raw)
+function parseAtomicRecords(value: Record<string, unknown>): readonly TencentDbRecord[] {
   const records = findRecords(value)
   if (records === undefined) throw new HarnessError('TencentDB response does not contain records', 'MEMORY_PROVIDER_ERROR')
   return records.map((record, index) => {
@@ -222,6 +247,23 @@ function parseRecords(raw: string): readonly TencentDbRecord[] {
   })
 }
 
+function parseScenarioEntries(value: Record<string, unknown>): Array<{ path: string; summary?: string }> {
+  const data = envelopeData(value)
+  if (!Array.isArray(data.entries)) throw malformed('TencentDB scenario list does not contain entries')
+  return data.entries.map((entry, index) => {
+    if (!isRecord(entry) || typeof entry.path !== 'string') throw malformed(`TencentDB scenario entry ${String(index)} is malformed`)
+    return { path: entry.path, ...(typeof entry.summary === 'string' ? { summary: entry.summary } : {}) }
+  }).filter(entry => entry.path.length > 0 && !entry.path.endsWith('/'))
+}
+
+function scenarioScore(entry: { path: string; summary?: string }, query: string): number {
+  const haystack = `${entry.path}\n${entry.summary ?? ''}`.toLowerCase()
+  const normalized = query.trim().toLowerCase()
+  const terms = [...new Set(normalized.split(/[^\p{L}\p{N}_-]+/u).filter(term => term.length > 1))]
+  return (haystack.includes(normalized) ? 10 : 0)
+    + terms.reduce((score, term) => score + Number(haystack.includes(term)), 0)
+}
+
 function parseSuccessEnvelope(raw: string): Record<string, unknown> {
   let value: unknown
   try {
@@ -231,6 +273,15 @@ function parseSuccessEnvelope(raw: string): Record<string, unknown> {
   }
   if (!isRecord(value) || value.code !== 0) throw new HarnessError('TencentDB response reports an unsuccessful operation', 'MEMORY_PROVIDER_ERROR')
   return value
+}
+
+function envelopeData(value: Record<string, unknown>): Record<string, unknown> {
+  if (!isRecord(value.data)) throw malformed('TencentDB response does not contain data')
+  return value.data
+}
+
+function malformed(message: string): HarnessError {
+  return new HarnessError(message, 'MEMORY_PROVIDER_ERROR')
 }
 
 function findRecords(value: unknown): readonly unknown[] | undefined {

@@ -41,7 +41,10 @@ export default class OpenVikingHttpProvider implements MemoryProvider {
   }
 
   async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
-    if (request.depth === undefined) throw new HarnessError('OpenViking retrieval depth is required', 'MEMORY_INVALID_REQUEST')
+    if (request.depth === undefined || request.depth === 'L3') {
+      throw new HarnessError('OpenViking retrieval depth must be L0, L1, or L2', 'MEMORY_INVALID_REQUEST')
+    }
+    const depth = request.depth
     if (request.signal.aborted) throw request.signal.reason
     const secret = this.config.credentialRef === undefined ? undefined : await this.resolveCredential(this.config.credentialRef)
     if (this.config.credentialRef !== undefined && secret === undefined) {
@@ -63,7 +66,7 @@ export default class OpenVikingHttpProvider implements MemoryProvider {
       })
       if (!response.ok) throw remoteFailure(response.status, 'openviking')
       const raw = await readBoundedBody(response, this.config.maxResponseBytes)
-      return normalizeOpenVikingRecords(parseRecords(raw, request.depth), request.depth, request)
+      return normalizeOpenVikingRecords(parseRecords(raw, depth), depth, request)
     } catch (error: unknown) {
       if (error instanceof HarnessError) throw error
       if (request.signal.aborted) throw request.signal.reason

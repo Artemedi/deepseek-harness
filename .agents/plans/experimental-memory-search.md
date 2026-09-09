@@ -53,7 +53,7 @@ rejects events claiming a workspace other than the owning session.
 - [x] Add automatic logged L1 recall before the first model step with fail-open durable failures.
 - [x] Allow the upstream anonymous loopback standalone Gateway while requiring bearer credentials for non-loopback endpoints.
 - [x] Start and stop an operator-installed, commit-pinned standalone MemoryCore runtime from the DSH composition.
-- [ ] Add bounded L2/L3 recall.
+- [x] Add bounded L2/L3 recall with explicit upstream scenario/core contracts and a shared automatic-recall budget.
 - [x] Add and run a live standalone MemoryCore v3 health, L0 capture/query, and L1 search smoke test.
 
 ## Definition of done

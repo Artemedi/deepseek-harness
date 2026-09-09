@@ -642,8 +642,10 @@ export interface Config {
   readonly openviking?: OpenVikingHttpConfig
   /** Export completed turns to the explicitly configured TencentDB provider. */
   readonly automaticCapture?: boolean
-  /** Recall TencentDB L1 memory before the first step of each turn. */
+  /** Recall configured TencentDB layers before the first step of each turn. */
   readonly automaticRecall?: boolean
+  /** TencentDB layers included by automatic recall. */
+  readonly automaticRecallDepths?: Array<'L1' | 'L2' | 'L3'>
 }
 
 /** Configuration for the opt-in TencentDB v3 atomic-search route. */

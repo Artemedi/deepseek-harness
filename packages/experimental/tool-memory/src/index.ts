@@ -61,7 +61,7 @@ export function apply(ctx: Context): void {
       limit: { type: 'integer', description: 'Maximum citations, from 1 through 20.' },
       max_content_bytes: { type: 'integer', description: 'Maximum UTF-8 bytes across returned citation text.' },
       provider: { type: 'string', description: 'Explicit provider: local, tencentdb, or openviking.' },
-      depth: { type: 'string', description: 'Required for openviking: L0, L1, or L2.' },
+      depth: { type: 'string', description: 'Memory layer: OpenViking requires L0-L2; TencentDB accepts L1-L3.' },
     },
     output: jsonOutput(SEARCH_OUTPUT_SCHEMA),
     async execute(args, exec) {
@@ -71,8 +71,8 @@ export function apply(ctx: Context): void {
         throw new Error('memory_search provider must be local, tencentdb, or openviking')
       }
       const depth = args.depth
-      if (depth !== undefined && depth !== 'L0' && depth !== 'L1' && depth !== 'L2') {
-        throw new Error('memory_search depth must be L0, L1, or L2')
+      if (depth !== undefined && depth !== 'L0' && depth !== 'L1' && depth !== 'L2' && depth !== 'L3') {
+        throw new Error('memory_search depth must be L0, L1, L2, or L3')
       }
       const result = await ctx.memory.search(agent, {
         query: args.query.trim(),
