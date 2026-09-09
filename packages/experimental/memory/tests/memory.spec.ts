@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -7,6 +7,9 @@ import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import type { SessionEventSearchDocument, SessionRecord } from '@deepseek-ai/dsh-session-query'
 import MemoryService from '@deepseek-ai/dsh-experimental-memory'
+import type { Config } from '@deepseek-ai/dsh-experimental-memory'
+import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
+import { createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 
 class TestQuery extends SessionQueryEngine {
   private readonly records: SessionRecord[]
@@ -63,13 +66,11 @@ function agentFor(ctx: Context, session: Session): { agent: Agent; dispose: () =
   return { agent, dispose: ctx.agents.register(agent) }
 }
 
-async function setup(cwd?: string, documentText = 'gateway retry evidence', config?: { providers?: string[] }): Promise<{ ctx: Context; agent: Agent; service: MemoryService; disposeAgent: () => void }> {
+async function setup(cwd?: string, documentText = 'gateway retry evidence', config?: Config): Promise<{ ctx: Context; agent: Agent; service: MemoryService; disposeAgent: () => void }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
-  const session = Session.create(SessionId('memory-owner'), [], header('memory-owner', cwd))
-  const owned = agentFor(ctx, session)
-  const agent = owned.agent
+  if (config?.tencentdb !== undefined) await ctx.plugin(MemoryCredentials, { TENCENT_KEY: 'secret-value' })
   const source = SessionId('memory-source')
   await ctx.plugin(class QueryPlugin extends TestQuery {
     constructor(owner: Context) {
@@ -84,6 +85,9 @@ async function setup(cwd?: string, documentText = 'gateway retry evidence', conf
     }
   })
   await ctx.plugin(MemoryService, config)
+  const session = ctx.sessions.create(SessionId('memory-owner'), cwd === undefined ? {} : { meta: { cwd } })
+  const owned = agentFor(ctx, session)
+  const agent = owned.agent
   return { ctx, agent, service: ctx.memory, disposeAgent: owned.dispose }
 }
 
@@ -131,6 +135,63 @@ describe('MemoryService', () => {
   it('rejects an enabled TencentDB route without connection and isolation configuration', async () => {
     await expect(setup('/workspace/a', 'unused', { providers: ['local', 'tencentdb'] }))
       .rejects.toThrow('TencentDB provider configuration is required')
+  })
+
+  it('captures through the enabled provider with the live Agent session identity', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({ session_id: 'memory-owner' })
+      return new Response(JSON.stringify({ code: 0, message: 'ok', request_id: 'capture-1', data: {} }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'],
+      tencentdb: {
+        baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      },
+    })
+    await expect(service.capture(agent, {
+      messages: [{ role: 'user', content: 'remember this' }], signal: new AbortController().signal,
+    })).resolves.toBeUndefined()
+    await ctx.fiber.dispose()
+    vi.unstubAllGlobals()
+  })
+
+  it('captures a completed turn with durable request and success events', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        session_id: 'memory-owner',
+        messages: [{ role: 'user', content: 'remember this' }, { role: 'assistant', content: 'noted' }],
+      })
+      return new Response(JSON.stringify({ code: 0, message: 'ok', request_id: 'capture-1', data: {} }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticCapture: true,
+      tencentdb: {
+        baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      },
+    })
+    expect(Reflect.get(service, 'config')).toMatchObject({ automaticCapture: true })
+    agent.session.append('turn/start', { turn: 1 })
+    agent.session.append('step/start', { turn: 1, step: 1 })
+    agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'remember this' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    agent.session.append('assistant/message', {
+      turn: 1, step: 1,
+      message: createAssistantMessage({ content: [{ type: 'text', text: 'noted' }], source: { provider: 'mock', model: 'mock' } }),
+    }, { surfaceOp: 'append', sourceEventSeqs: [] })
+    agent.session.append('step/end', { turn: 1, step: 1 })
+    agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+
+    await service.captureCompletedTurns(agent, new AbortController().signal)
+    expect(agent.session.events.find(event => event.type === 'memory/capture-succeeded')).toBeDefined()
+    expect(agent.session.events.filter(event => event.type === 'memory/capture-requested')).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await ctx.fiber.dispose()
+    vi.unstubAllGlobals()
   })
 
   it('requires explicit OpenViking depth', async () => {

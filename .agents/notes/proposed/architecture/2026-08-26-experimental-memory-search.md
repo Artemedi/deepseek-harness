@@ -16,6 +16,8 @@ The first provider exposes search only. It validates stale Agents, missing works
 
 The opt-in TencentDB provider uses the upstream v3 data-plane contract rather than translating a DSH workspace into provider tenancy. Deployment configuration supplies the memory service, Team, Agent, and User identifiers; every search sends that isolation tuple and records the returned L1 atomic-memory citations under the caller's DSH workspace. Missing connection or isolation configuration rejects the composition instead of selecting test data.
 
+Optional automatic capture exports only direct user text and assistant text from completed or max-token turns after the Agent becomes idle. DSH records and flushes a capture request before the remote write, then records a bounded success or failure event. Delivery is at least once because a process can stop after TencentDB accepts the turn but before DSH records success.
+
 ## Alternatives considered
 
 **Direct external prompt injection.** Rejected because retrieved text would become hidden model state that replay cannot reconstruct from the session log.

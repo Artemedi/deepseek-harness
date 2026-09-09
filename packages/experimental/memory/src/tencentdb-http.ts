@@ -2,7 +2,7 @@
 
 import { Buffer } from 'node:buffer'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
-import type { MemoryProvider, MemoryProviderSearchRequest, MemorySearchResult } from './types.ts'
+import type { MemoryCaptureMessage, MemoryProvider, MemoryProviderCaptureRequest, MemoryProviderSearchRequest, MemorySearchResult } from './types.ts'
 import { normalizeTencentDbRecords, remoteFailure } from './remote-contract.ts'
 import type { TencentDbRecord } from './remote-contract.ts'
 
@@ -23,6 +23,14 @@ type ResolvedConfig = Required<TencentDbHttpConfig>
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576
+const MAX_CAPTURE_MESSAGES = 256
+const MAX_CAPTURE_BYTES = 1_048_576
+
+/** One text message accepted by TencentDB's v3 conversation-ingest route. */
+export type TencentDbConversationMessage = MemoryCaptureMessage
+
+/** A completed DSH conversation slice to persist as TencentDB L0 memory. */
+export type TencentDbCaptureRequest = Pick<MemoryProviderCaptureRequest, 'sessionId' | 'messages' | 'signal'>
 
 /** Fetches explicit TencentDB v3 atomic-search records and returns bounded citations. */
 export default class TencentDbHttpProvider implements MemoryProvider {
@@ -88,6 +96,62 @@ export default class TencentDbHttpProvider implements MemoryProvider {
       request.signal.removeEventListener('abort', abort)
     }
   }
+
+  /** Persists a bounded completed conversation slice for asynchronous memory extraction. */
+  async capture(request: TencentDbCaptureRequest): Promise<void> {
+    if (request.signal.aborted) throw request.signal.reason
+    const sessionId = typeof request.sessionId === 'string' ? request.sessionId.trim() : ''
+    if (sessionId.length === 0) throw new HarnessError('TencentDB capture sessionId must not be empty', 'MEMORY_INVALID_REQUEST')
+    if (!Array.isArray(request.messages) || request.messages.length === 0) throw new HarnessError('TencentDB capture messages must not be empty', 'MEMORY_INVALID_REQUEST')
+    if (request.messages.length > MAX_CAPTURE_MESSAGES) throw new HarnessError('TencentDB capture exceeds the message count limit', 'MEMORY_INVALID_REQUEST')
+    for (const [index, message] of request.messages.entries()) {
+      if ((message.role !== 'user' && message.role !== 'assistant') || typeof message.content !== 'string' || message.content.trim().length === 0) {
+        throw new HarnessError(`TencentDB capture message ${String(index)} is malformed`, 'MEMORY_INVALID_REQUEST')
+      }
+    }
+    const body = JSON.stringify({
+      team_id: this.config.teamId,
+      agent_id: this.config.agentId,
+      user_id: this.config.userId,
+      session_id: sessionId,
+      messages: request.messages,
+    })
+    if (Buffer.byteLength(body, 'utf8') > MAX_CAPTURE_BYTES) {
+      throw new HarnessError('TencentDB capture exceeds the request byte limit', 'MEMORY_INVALID_REQUEST')
+    }
+
+    if (request.signal.aborted) throw request.signal.reason
+    const secret = await this.resolveCredential(this.config.credentialRef)
+    if (request.signal.aborted) throw request.signal.reason
+    if (secret === undefined) throw new HarnessError('TencentDB credential is not configured', 'MEMORY_UNAUTHORIZED')
+    const controller = new AbortController()
+    const deadline = setTimeout(() => controller.abort(new Error('TencentDB request timed out')), this.config.timeoutMs)
+    const abort = () => controller.abort(request.signal.reason)
+    request.signal.addEventListener('abort', abort, { once: true })
+    try {
+      const response = await fetch(`${this.config.baseUrl}/v3/conversation/add`, {
+        method: 'POST',
+        redirect: 'error',
+        signal: controller.signal,
+        headers: {
+          [this.config.authHeader]: `Bearer ${secret}`,
+          'x-tdai-service-id': this.config.serviceId,
+          'Content-Type': 'application/json',
+        },
+        body,
+      })
+      if (!response.ok) throw remoteFailure(response.status, 'tencentdb')
+      parseSuccessEnvelope(await readBoundedBody(response, this.config.maxResponseBytes))
+    } catch (error: unknown) {
+      if (error instanceof HarnessError) throw error
+      if (request.signal.aborted) throw request.signal.reason
+      if (controller.signal.aborted) throw new HarnessError('TencentDB request timed out', 'MEMORY_RETRYABLE')
+      throw new HarnessError('TencentDB provider request failed', 'MEMORY_PROVIDER_UNAVAILABLE')
+    } finally {
+      clearTimeout(deadline)
+      request.signal.removeEventListener('abort', abort)
+    }
+  }
 }
 
 async function readBoundedBody(response: Response, maxBytes: number): Promise<string> {
@@ -99,13 +163,7 @@ async function readBoundedBody(response: Response, maxBytes: number): Promise<st
 }
 
 function parseRecords(raw: string): readonly TencentDbRecord[] {
-  let value: unknown
-  try {
-    value = JSON.parse(raw)
-  } catch {
-    throw new HarnessError('TencentDB response is not valid JSON', 'MEMORY_PROVIDER_ERROR')
-  }
-  if (!isRecord(value) || value.code !== 0) throw new HarnessError('TencentDB response reports an unsuccessful operation', 'MEMORY_PROVIDER_ERROR')
+  const value = parseSuccessEnvelope(raw)
   const records = findRecords(value)
   if (records === undefined) throw new HarnessError('TencentDB response does not contain records', 'MEMORY_PROVIDER_ERROR')
   return records.map((record, index) => {
@@ -120,6 +178,17 @@ function parseRecords(raw: string): readonly TencentDbRecord[] {
       source: `tencentdb:atomic:${record.id}`,
     }
   })
+}
+
+function parseSuccessEnvelope(raw: string): Record<string, unknown> {
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    throw new HarnessError('TencentDB response is not valid JSON', 'MEMORY_PROVIDER_ERROR')
+  }
+  if (!isRecord(value) || value.code !== 0) throw new HarnessError('TencentDB response reports an unsuccessful operation', 'MEMORY_PROVIDER_ERROR')
+  return value
 }
 
 function findRecords(value: unknown): readonly unknown[] | undefined {

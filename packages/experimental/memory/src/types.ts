@@ -58,12 +58,33 @@ export interface MemoryProviderSearchRequest {
   readonly signal: AbortSignal
 }
 
+/** One completed conversation message accepted by a durable memory provider. */
+export interface MemoryCaptureMessage {
+  readonly role: 'user' | 'assistant'
+  readonly content: string
+}
+
+/** Capture input independent of provider-specific tenancy and wire fields. */
+export interface MemoryCaptureRequest {
+  readonly messages: readonly MemoryCaptureMessage[]
+  readonly provider?: 'tencentdb'
+  readonly signal: AbortSignal
+}
+
+/** Capture request after DSH derives the owning session and workspace. */
+export interface MemoryProviderCaptureRequest extends MemoryCaptureRequest {
+  readonly sessionId: SessionId
+  readonly workspace: string
+}
+
 /** Provider-neutral retrieval implementation used behind `ctx.memory`. */
 export interface MemoryProvider {
   /** Stable provider id recorded in the durable search observation. */
   readonly id: string
   /** Retrieve bounded citations without changing DSH authorization or persistence. */
   search(request: MemoryProviderSearchRequest): Promise<readonly MemoryHit[]>
+  /** Persist a completed conversation slice when the provider supports capture. */
+  capture?(request: MemoryProviderCaptureRequest): Promise<void>
 }
 
 /** Immutable execution plan produced after request validation and provider selection. */
@@ -87,11 +108,34 @@ export interface MemorySearchEvent {
   readonly hits: readonly MemoryHit[]
 }
 
+/** Durable intent to export one completed turn to remote memory. */
+export interface MemoryCaptureRequestedEvent {
+  readonly version: 1
+  readonly provider: 'tencentdb'
+  readonly turn: number
+  readonly messageCount: number
+}
+
+/** Durable completion of one remote-memory turn export. */
+export interface MemoryCaptureSucceededEvent {
+  readonly version: 1
+  readonly provider: 'tencentdb'
+  readonly turn: number
+}
+
+/** Durable safe failure of one remote-memory turn export. */
+export interface MemoryCaptureFailedEvent extends MemoryCaptureSucceededEvent {
+  readonly code: string
+}
+
 /** Merge-extensible durable memory event map. */
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /** Exact bounded citations returned by one explicit memory search. */
     'memory/search': MemorySearchEvent
+    'memory/capture-requested': MemoryCaptureRequestedEvent
+    'memory/capture-succeeded': MemoryCaptureSucceededEvent
+    'memory/capture-failed': MemoryCaptureFailedEvent
   }
 }
 

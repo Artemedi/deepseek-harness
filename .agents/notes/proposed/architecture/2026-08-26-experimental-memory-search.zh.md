@@ -16,6 +16,8 @@ Status: proposed
 
 Opt-in TencentDB provider 使用上游 v3 data-plane contract，而不把 DSH workspace 转换为 provider tenancy。部署配置提供 memory service、Team、Agent 和 User 标识符；每次搜索都发送该 isolation tuple，并在调用者的 DSH workspace 下记录返回的 L1 atomic-memory citations。缺少连接或隔离配置时，composition 会被拒绝，而不会选择测试数据。
 
+可选 automatic capture 在 Agent 进入 idle 后，仅导出 completed 或 max-token turn 中的直接用户文本和助手文本。DSH 在远程写入前记录并 flush capture request，随后记录有界的 success 或 failure event。由于进程可能在 TencentDB 接受 turn 后、DSH 记录成功前停止，因此交付语义为 at least once。
+
 ## Alternatives considered
 
 **直接把外部结果注入提示词。** 拒绝，因为检索文本会成为无法从会话日志重建的隐藏 model state。

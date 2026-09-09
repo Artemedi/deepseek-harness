@@ -11,11 +11,12 @@
 - ✅ Включённый TencentDB route без реальной конфигурации падает при загрузке; runtime stub удалён.
 - ✅ Добавлен opt-in overlay `integrations/tencentdb-agent-memory/memory.cordis.yml.example`.
 - ✅ Фокусные tests: 17 passed; package TypeScript checks и `git diff --check` прошли.
-- ⏳ L0 capture, автоматический L1/L2/L3 recall и live MemoryCore smoke не реализованы.
+- ✅ Opt-in L0 capture экспортирует completed/max-token turns после idle и записывает durable requested/succeeded/failed events; crash-window пока at least once.
+- ⏳ Автоматический L1/L2/L3 recall и live MemoryCore smoke не реализованы.
 
 ## Следующий шаг
 
-Добавить lifecycle consumer отдельным plugin: искать и логировать recall через `agent/pre-step`, а завершённые turns ставить в durable capture queue после `turn/end` и выполнять через `agent.runMaintenance()` при idle. Нельзя вызывать `Session.append()` реентрантно из `session/event`.
+Добавить автоматический логируемый recall через `agent/pre-step`, сохраняя явный `memory_search` как ручной путь и fail-open поведение при недоступности TencentDB.
 
 ## Открытые вопросы
 

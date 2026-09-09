@@ -10,7 +10,7 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type SessionQueryEngine from '@deepseek-ai/dsh-session-query'
-import type { MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
+import type { MemoryCaptureMessage, MemoryCaptureRequest, MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
 import { normalizeOpenVikingRecords, OPENVIKING_STUB_RECORDS } from './remote-contract.ts'
 import TencentDbHttpProvider, { type TencentDbHttpConfig } from './tencentdb-http.ts'
 import OpenVikingHttpProvider, { type OpenVikingHttpConfig } from './openviking-http.ts'
@@ -23,7 +23,7 @@ export type * from './types.ts'
 export { normalizeOpenVikingRecords, normalizeTencentDbRecords, remoteFailure } from './remote-contract.ts'
 export type { OpenVikingDepth, OpenVikingRecord, RemoteMemoryCitation, RemoteMemoryProvider, RemoteMemorySearchRequest, TencentDbRecord } from './remote-contract.ts'
 export { default as TencentDbHttpProvider } from './tencentdb-http.ts'
-export type { TencentDbHttpConfig } from './tencentdb-http.ts'
+export type { TencentDbCaptureRequest, TencentDbConversationMessage, TencentDbHttpConfig } from './tencentdb-http.ts'
 export { default as OpenVikingHttpProvider } from './openviking-http.ts'
 export type { OpenVikingHttpConfig } from './openviking-http.ts'
 
@@ -79,6 +79,8 @@ export interface Config {
   readonly tencentdb?: TencentDbHttpConfig
   /** Explicit OpenViking HTTP provider configuration. */
   readonly openviking?: OpenVikingHttpConfig
+  /** Export completed turns to the explicitly configured TencentDB provider. */
+  readonly automaticCapture?: boolean
 }
 
 /** Loader configuration for the experimental memory providers. */
@@ -104,6 +106,7 @@ export const Config: z<Config> = z.object({
     maxResponseBytes: z.number().step(1).min(1).max(16_777_216).default(1_048_576),
     targetUri: z.string().required(false),
   }).required(false),
+  automaticCapture: z.boolean().default(false),
 })
 
 declare module '@deepseek-ai/cordis' {
@@ -114,7 +117,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Explicit local-memory service over the existing session-query corpus. */
 export default class MemoryService extends Service {
-  static inject = ['agents', 'sessionQuery']
+  static inject = ['agents', 'sessionQuery', 'sessions']
 
   private readonly config: {
     readonly defaultLimit: number
@@ -122,6 +125,7 @@ export default class MemoryService extends Service {
     readonly providers: string[]
     readonly tencentdb?: TencentDbHttpConfig
     readonly openviking?: OpenVikingHttpConfig
+    readonly automaticCapture: boolean
   }
   private readonly providers: Map<string, MemoryProvider>
 
@@ -134,6 +138,7 @@ export default class MemoryService extends Service {
       providers: config.providers ?? ['local'],
       ...(config.tencentdb === undefined ? {} : { tencentdb: config.tencentdb }),
       ...(config.openviking === undefined ? {} : { openviking: config.openviking }),
+      automaticCapture: config.automaticCapture ?? false,
     }
     const available = new Map<string, MemoryProvider>([
       ['local', new LocalSessionMemoryProvider(ctx.sessionQuery)],
@@ -163,6 +168,15 @@ export default class MemoryService extends Service {
     }
     if (!providers.has('local')) throw new HarnessError('memory provider configuration must include local', 'MEMORY_INVALID_REQUEST')
     this.providers = providers
+    if (this.config.automaticCapture) {
+      if (!providers.has('tencentdb')) throw new HarnessError('automatic memory capture requires the TencentDB provider', 'MEMORY_INVALID_REQUEST')
+      ctx.on('agent/status', ({ agent, status }) => {
+        if (status !== 'idle') return
+        void agent.runMaintenance(signal => this.captureCompletedTurns(agent, signal)).catch((error: unknown) => {
+          this.ctx.logger.warn(`automatic memory capture failed for session "${agent.session.id}": ${String(error)}`)
+        })
+      }, { global: true })
+    }
   }
 
   /**
@@ -217,4 +231,84 @@ export default class MemoryService extends Service {
     const hits = await spec.provider.search(providerRequest)
     return { provider: spec.provider.id, workspace: spec.workspace, hits }
   }
+
+  /**
+   * Persist one completed conversation slice through an explicitly enabled provider.
+   * @param agent - exact live Agent whose session and workspace own the slice.
+   * @param request - bounded messages, provider selection, and cancellation.
+   */
+  async capture(agent: Agent, request: MemoryCaptureRequest): Promise<void> {
+    if (this.ctx.agents.get(agent.id) !== agent) {
+      throw new HarnessError('memory capture requires an exact live Agent', 'MEMORY_STALE_AGENT')
+    }
+    const workspace = agent.session.header.cwd
+    if (workspace === undefined) {
+      throw new HarnessError('memory capture is unavailable because the caller session has no workspace', 'MEMORY_UNAUTHORIZED')
+    }
+    if (request.signal.aborted) throw request.signal.reason
+    const providerId = request.provider ?? 'tencentdb'
+    const provider = this.providers.get(providerId)
+    if (provider?.capture === undefined) {
+      throw new HarnessError(`memory provider "${providerId}" does not support capture`, 'MEMORY_PROVIDER_ERROR')
+    }
+    await provider.capture({
+      sessionId: agent.session.id,
+      workspace,
+      messages: request.messages,
+      provider: providerId,
+      signal: request.signal,
+    })
+  }
+
+  /** Export every completed, not-yet-successful turn in chronological order. */
+  async captureCompletedTurns(agent: Agent, signal: AbortSignal): Promise<void> {
+    const succeeded = new Set<number>()
+    const completed: number[] = []
+    for (const event of agent.session.events) {
+      if (event.type === 'memory/capture-succeeded') succeeded.add(event.data.turn)
+      if (event.type === 'turn/end' && (event.data.reason.kind === 'completed' || event.data.reason.kind === 'max-tokens')) {
+        completed.push(event.data.turn)
+      }
+    }
+    for (const turn of completed) {
+      if (signal.aborted) throw signal.reason
+      if (succeeded.has(turn)) continue
+      const messages = turnCaptureMessages(agent, turn)
+      if (messages.length === 0) continue
+      agent.session.append('memory/capture-requested', {
+        version: 1, provider: 'tencentdb', turn, messageCount: messages.length,
+      })
+      await this.ctx.sessions.flush(agent.session)
+      try {
+        await this.capture(agent, { provider: 'tencentdb', messages, signal })
+        agent.session.append('memory/capture-succeeded', { version: 1, provider: 'tencentdb', turn })
+      } catch (error: unknown) {
+        const code = error instanceof HarnessError ? error.code : 'MEMORY_PROVIDER_ERROR'
+        agent.session.append('memory/capture-failed', { version: 1, provider: 'tencentdb', turn, code })
+      }
+      await this.ctx.sessions.flush(agent.session)
+    }
+  }
+}
+
+function turnCaptureMessages(agent: Agent, turn: number): MemoryCaptureMessage[] {
+  const messages: MemoryCaptureMessage[] = []
+  let inside = false
+  for (const event of agent.session.events) {
+    if (event.type === 'turn/start' && event.data.turn === turn) inside = true
+    if (!inside) continue
+    if (event.type === 'user/message' && event.data.source.kind === 'user') {
+      const content = textContent(event.data.content)
+      if (content !== '') messages.push({ role: 'user', content })
+    } else if (event.type === 'assistant/message' && event.data.turn === turn) {
+      const content = textContent(event.data.message.content)
+      if (content !== '') messages.push({ role: 'assistant', content })
+    }
+    if (event.type === 'turn/end' && event.data.turn === turn) break
+  }
+  return messages
+}
+
+function textContent(content: readonly { readonly type: string; readonly text?: string }[]): string {
+  return content.flatMap(block => block.type === 'text' && block.text !== undefined ? [block.text] : []).join('\n').trim()
 }

@@ -49,7 +49,7 @@ rejects events claiming a workspace other than the owning session.
 - [x] Align explicit L1 search with the upstream v3 isolation, service-header, and response-envelope contract.
 - [x] Reject an enabled TencentDB route without real connection and isolation configuration.
 - [x] Add an opt-in native retrieval overlay.
-- [ ] Add durable L0 capture with retry and idempotency events.
+- [x] Add durable L0 capture with requested, succeeded, and safe failed events; delivery remains at least once across the crash window.
 - [ ] Add automatic logged L1/L2/L3 recall before the first model step.
 - [ ] Add a live standalone MemoryCore smoke test.
 
