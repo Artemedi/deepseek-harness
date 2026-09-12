@@ -6,6 +6,7 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
@@ -13,7 +14,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type SessionQueryEngine from '@deepseek-ai/dsh-session-query'
-import type { MemoryCaptureMessage, MemoryCaptureRequest, MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
+import type { MemoryCaptureMessage, MemoryCaptureRequest, MemoryDiagnosticCode, MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
 import { normalizeOpenVikingRecords, OPENVIKING_STUB_RECORDS } from './remote-contract.ts'
 import TencentDbHttpProvider, { type TencentDbHttpConfig } from './tencentdb-http.ts'
 import OpenVikingHttpProvider, { type OpenVikingHttpConfig } from './openviking-http.ts'
@@ -27,7 +28,15 @@ export type * from './types.ts'
 export { normalizeOpenVikingRecords, normalizeTencentDbRecords, remoteFailure } from './remote-contract.ts'
 export type { OpenVikingDepth, OpenVikingRecord, RemoteMemoryCitation, RemoteMemoryProvider, RemoteMemorySearchRequest, TencentDbRecord } from './remote-contract.ts'
 export { default as TencentDbHttpProvider } from './tencentdb-http.ts'
-export type { TencentDbCaptureRequest, TencentDbConversationMessage, TencentDbHttpConfig } from './tencentdb-http.ts'
+export type {
+  TencentDbAgentId,
+  TencentDbCaptureRequest,
+  TencentDbConversationMessage,
+  TencentDbHttpConfig,
+  TencentDbIsolationBinding,
+  TencentDbTeamId,
+  TencentDbUserId,
+} from './tencentdb-http.ts'
 export type { TencentDbManagedRuntimeConfig } from './tencentdb-runtime.ts'
 export { default as OpenVikingHttpProvider } from './openviking-http.ts'
 export type { OpenVikingHttpConfig } from './openviking-http.ts'
@@ -103,9 +112,13 @@ export const Config: z<Config> = z.object({
     baseUrl: z.string(),
     credentialRef: z.string().required(false),
     serviceId: z.string(),
-    teamId: z.string(),
-    agentId: z.string(),
-    userId: z.string(),
+    isolationBindings: z.array(z.object({
+      workspace: z.string(),
+      agentPreset: z.string().required(false),
+      teamId: z.string(),
+      agentId: z.string(),
+      userId: z.string(),
+    })),
     authHeader: z.string().default('Authorization'),
     timeoutMs: z.number().step(1).min(1).max(300_000).default(30_000),
     maxResponseBytes: z.number().step(1).min(1).max(16_777_216).default(1_048_576),
@@ -300,9 +313,11 @@ export default class MemoryService extends Service {
    */
   async search(agent: Agent, request: MemorySearchRequest): Promise<MemorySearchResult> {
     const spec = this.resolve(agent, request)
+    const agentPreset = resolveSessionPreset(agent.session)
     const providerRequest: MemoryProviderSearchRequest = {
       workspace: spec.workspace, query: spec.query, limit: spec.limit, maxContentBytes: spec.maxContentBytes, signal: spec.signal,
       ...spec.depth === undefined ? {} : { depth: spec.depth },
+      ...agentPreset === undefined ? {} : { agentPreset },
     }
     const hits = await spec.provider.search(providerRequest)
     return { provider: spec.provider.id, workspace: spec.workspace, hits }
@@ -327,9 +342,11 @@ export default class MemoryService extends Service {
     if (provider?.capture === undefined) {
       throw new HarnessError(`memory provider "${providerId}" does not support capture`, 'MEMORY_PROVIDER_ERROR')
     }
+    const agentPreset = resolveSessionPreset(agent.session)
     await provider.capture({
       sessionId: agent.session.id,
       workspace,
+      ...agentPreset === undefined ? {} : { agentPreset },
       messages: request.messages,
       provider: providerId,
       signal: request.signal,
@@ -363,7 +380,7 @@ export default class MemoryService extends Service {
         await this.capture(agent, { provider: 'tencentdb', messages, signal })
         agent.session.append('memory/capture-succeeded', { version: 1, provider: 'tencentdb', turn })
       } catch (error: unknown) {
-        const code = error instanceof HarnessError ? error.code : 'MEMORY_PROVIDER_ERROR'
+        const code = memoryDiagnosticCode(error)
         agent.session.append('memory/capture-failed', { version: 1, provider: 'tencentdb', turn, code })
       }
       await this.ctx.sessions.flush(agent.session)
@@ -401,7 +418,7 @@ export default class MemoryService extends Service {
         }
       } catch (error: unknown) {
         if (signal.aborted) throw signal.reason
-        const code = error instanceof HarnessError ? error.code : 'MEMORY_PROVIDER_ERROR'
+        const code = memoryDiagnosticCode(error)
         agent.session.append('memory/recall-failed', { version: 1, provider: 'tencentdb', code, depth })
       }
     }
@@ -418,6 +435,21 @@ export default class MemoryService extends Service {
       content: [{ type: 'text', text }],
       source: { kind: 'plugin', plugin: 'experimental-memory', form: 'snapshot', sections: [{ name: 'tencentdb-memory', text }] },
     })
+  }
+}
+
+function memoryDiagnosticCode(error: unknown): MemoryDiagnosticCode {
+  if (!(error instanceof HarnessError)) return 'MEMORY_PROVIDER_ERROR'
+  switch (error.code) {
+    case 'MEMORY_INVALID_REQUEST':
+    case 'MEMORY_STALE_AGENT':
+    case 'MEMORY_UNAUTHORIZED':
+    case 'MEMORY_RETRYABLE':
+    case 'MEMORY_PROVIDER_UNAVAILABLE':
+    case 'MEMORY_PROVIDER_ERROR':
+      return error.code
+    default:
+      return 'MEMORY_PROVIDER_ERROR'
   }
 }
 

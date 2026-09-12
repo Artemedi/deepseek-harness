@@ -30,9 +30,11 @@
               tencentdb:
                 baseUrl: !!js process.env.DSH_TENCENTDB_TEST_URL
                 serviceId: memory-1
-                teamId: team-1
-                agentId: agent-1
-                userId: user-1
+                isolationBindings:
+                  - workspace: !!js process.cwd()
+                    teamId: team-1
+                    agentId: agent-1
+                    userId: user-1
       - id: persistence
         name: '@deepseek-ai/dsh-session-persistence-jsonl'
         config:

@@ -656,12 +656,8 @@ export interface TencentDbHttpConfig {
   readonly credentialRef?: string
   /** Memory instance selected by `x-tdai-service-id`. */
   readonly serviceId: string
-  /** Provider-side Team isolation identifier. */
-  readonly teamId: string
-  /** Provider-side Agent isolation identifier. */
-  readonly agentId: string
-  /** Provider-side User isolation identifier. */
-  readonly userId: string
+  /** Exact DSH workspace/preset to provisioned TencentDB isolation mappings. */
+  readonly isolationBindings: TencentDbIsolationBinding[]
   /** Header carrying the bearer token. */
   readonly authHeader?: string
   /** Per-request network timeout in milliseconds. */
@@ -711,9 +707,23 @@ export interface OpenVikingHttpConfig {
   /** Optional trusted `viking://` retrieval scope. */
   readonly targetUri?: string
 }
+
+/** One explicit DSH workspace/preset to TencentDB tenancy binding. */
+export interface TencentDbIsolationBinding {
+  /** Absolute DSH workspace path. */
+  readonly workspace: string
+  /** Effective agent preset; omission binds only sessions with no preset. */
+  readonly agentPreset?: string
+  /** Provider-side Team isolation identifier. */
+  readonly teamId: string
+  /** Provider-side Agent isolation identifier. */
+  readonly agentId: string
+  /** Provider-side User isolation identifier. */
+  readonly userId: string
+}
 ```
 
-来源：[`packages/experimental/memory/src/index.ts:76`](../packages/experimental/memory/src/index.ts)
+来源：[`packages/experimental/memory/src/index.ts:85`](../packages/experimental/memory/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-tool-agent-team"></a>
 

@@ -2,7 +2,7 @@
 
 Active plan for the experimental `memory_search` tool and local search provider.
 Implements phase 2 of `.agents/notes/proposed/architecture/2026-08-26-three-project-integration-plan.md`,
-scoped by `.agents/notes/proposed/architecture/2026-08-26-experimental-memory-search.md`.
+scoped by `.agents/notes/implemented/architecture/2026-08-26-experimental-memory-search.md`.
 
 ## Goal
 
@@ -55,8 +55,16 @@ rejects events claiming a workspace other than the owning session.
 - [x] Start and stop an operator-installed, commit-pinned standalone MemoryCore runtime from the DSH composition.
 - [x] Add bounded L2/L3 recall with explicit upstream scenario/core contracts and a shared automatic-recall budget.
 - [x] Add and run a live standalone MemoryCore v3 health, L0 capture/query, and L1 search smoke test.
+- [x] Run live L1 and L2 extraction through an OpenAI-compatible LLM and read the resulting atomic memory and scenario.
+- [x] Define and implement atomic L3 publication after live evidence showed `persona.md` remained readable when a later LLM continuation failed: file tools now write an isolated draft and publish only after the complete runner succeeds.
 - [x] Prove automatic recall through a real headless Loader, AgentLoop, model request, and persisted event projection.
 - [x] Enforce the pinned L0 capture bounds and validate the complete conversation acceptance result.
+- [x] Replace the deployment-wide TencentDB isolation tuple with exact absolute-workspace/effective-preset bindings and reject ambiguous or unbound scopes before HTTP.
+- [x] Define layered recall as fail-open for provider failures, fail-fast for cancellation, with a closed non-sensitive durable diagnostic vocabulary.
+- [x] Stream remote responses under the configured byte limit and reject provider URLs that are not bare HTTP(S) origins.
+- [x] Add every durable memory event to the generated persistence vocabulary so logs containing capture or recall diagnostics can resume.
+- [x] Make failed L3 generation and source reads reject without advancing the checkpoint.
+- [x] Publish the L3 fix as upstream PR `TencentCloud/TencentDB-Agent-Memory#1355` from signed commit `5782862`.
 
 ## Definition of done
 
@@ -64,12 +72,19 @@ rejects events claiming a workspace other than the owning session.
 - A Loader test proves the tool records `memory/search` with exact citations
   before returning model-visible text, and that workspace-mismatch events are
   rejected.
-- No external durable vector store wired yet (search is session-history-only).
+- The opt-in TencentDB route captures L0 turns, retrieves bounded L1-L3 results,
+  supports an owned local runtime, and records model-visible recall before use.
+- Live L1/L2 extraction through a functioning MemoryCore LLM pipeline is
+  verified; L3 draft isolation is covered by regression tests and a live AI-SDK
+  write-then-429 smoke that leaves the published profile unchanged.
 - HANDOFF reflects the shipped state.
 
 ## Notes
 
 - This is an **experimental** package; it ships under
   `packages/experimental/*` and the `experimental-verifier` bundle.
-- Phase 1 (TencentDB proxy validation) and phases 3–5 are **out of scope**
-  here — tracked in the three-project integration plan note.
+- The final production-readiness review was completed after switching above the
+  earlier Sol `high` boundary. It closed response buffering, endpoint parsing,
+  durable event vocabulary, and L3 checkpoint/read-failure gaps.
+- The broader rollout remains tracked in the
+  [three-project integration plan](../notes/proposed/architecture/2026-08-26-three-project-integration-plan.md).

@@ -1,0 +1,8 @@
+# Opt-in DSH LLM proxy route for the TencentDB Agent Memory integration.
+# This is the DSH proxy (port 8096), separate from the MemoryCore Gateway (port 8420).
+# Keep this outside the default profile until gateway error propagation is fixed.
+llm-deepseek:
+  apiKeyEnv: TDAI_PROXY_USER_KEY
+  # TencentDB's dsh route intentionally has no trailing /v1.
+  baseURL: http://127.0.0.1:8096/dsh/default
+  reasoningEffort: high

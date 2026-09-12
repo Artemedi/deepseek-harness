@@ -1,10 +1,34 @@
 /** Explicit TencentDB Agent Memory v3 HTTP provider. */
 
 import { Buffer } from 'node:buffer'
+import { isAbsolute, resolve } from 'node:path'
+import type { Branded } from '@deepseek-ai/dsh-brand'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { MemoryCaptureMessage, MemoryProvider, MemoryProviderCaptureRequest, MemoryProviderSearchRequest, MemorySearchResult } from './types.ts'
+import { parseRemoteMemoryOrigin, readBoundedResponseText, resolveRemoteMemoryLimit } from './http-response.ts'
 import { normalizeTencentDbRecords, remoteFailure } from './remote-contract.ts'
 import type { TencentDbRecord } from './remote-contract.ts'
+
+/** Provider-side Team isolation identity. */
+export type TencentDbTeamId = Branded<'TencentDbTeamId'>
+/** Provider-side Agent isolation identity. */
+export type TencentDbAgentId = Branded<'TencentDbAgentId'>
+/** Provider-side User isolation identity. */
+export type TencentDbUserId = Branded<'TencentDbUserId'>
+
+/** One explicit DSH workspace/preset to TencentDB tenancy binding. */
+export interface TencentDbIsolationBinding {
+  /** Absolute DSH workspace path. */
+  readonly workspace: string
+  /** Effective agent preset; omission binds only sessions with no preset. */
+  readonly agentPreset?: string
+  /** Provider-side Team isolation identifier. */
+  readonly teamId: string
+  /** Provider-side Agent isolation identifier. */
+  readonly agentId: string
+  /** Provider-side User isolation identifier. */
+  readonly userId: string
+}
 
 /** Configuration for the opt-in TencentDB v3 atomic-search route. */
 export interface TencentDbHttpConfig {
@@ -14,12 +38,8 @@ export interface TencentDbHttpConfig {
   readonly credentialRef?: string
   /** Memory instance selected by `x-tdai-service-id`. */
   readonly serviceId: string
-  /** Provider-side Team isolation identifier. */
-  readonly teamId: string
-  /** Provider-side Agent isolation identifier. */
-  readonly agentId: string
-  /** Provider-side User isolation identifier. */
-  readonly userId: string
+  /** Exact DSH workspace/preset to provisioned TencentDB isolation mappings. */
+  readonly isolationBindings: TencentDbIsolationBinding[]
   /** Header carrying the bearer token. */
   readonly authHeader?: string
   /** Per-request network timeout in milliseconds. */
@@ -28,10 +48,28 @@ export interface TencentDbHttpConfig {
   readonly maxResponseBytes?: number
 }
 
-type ResolvedConfig = Required<Omit<TencentDbHttpConfig, 'credentialRef'>> & Pick<TencentDbHttpConfig, 'credentialRef'>
+interface ResolvedBinding {
+  readonly workspace: string
+  readonly agentPreset?: string
+  readonly teamId: TencentDbTeamId
+  readonly agentId: TencentDbAgentId
+  readonly userId: TencentDbUserId
+}
+
+interface ResolvedConfig {
+  readonly baseUrl: string
+  readonly credentialRef?: string
+  readonly serviceId: string
+  readonly isolationBindings: ReadonlyMap<string, ResolvedBinding>
+  readonly authHeader: string
+  readonly timeoutMs: number
+  readonly maxResponseBytes: number
+}
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576
+const MAX_TIMEOUT_MS = 300_000
+const MAX_RESPONSE_BYTES = 16_777_216
 const MAX_CAPTURE_MESSAGES = 100
 const MAX_CAPTURE_CONTENT_LENGTH = 8_192
 const MAX_CAPTURE_BYTES = 1_048_576
@@ -40,7 +78,7 @@ const MAX_CAPTURE_BYTES = 1_048_576
 export type TencentDbConversationMessage = MemoryCaptureMessage
 
 /** A completed DSH conversation slice to persist as TencentDB L0 memory. */
-export type TencentDbCaptureRequest = Pick<MemoryProviderCaptureRequest, 'sessionId' | 'messages' | 'signal'>
+export type TencentDbCaptureRequest = Pick<MemoryProviderCaptureRequest, 'sessionId' | 'workspace' | 'agentPreset' | 'messages' | 'signal'>
 
 /** Fetches explicit TencentDB v3 atomic-search records and returns bounded citations. */
 export default class TencentDbHttpProvider implements MemoryProvider {
@@ -48,13 +86,7 @@ export default class TencentDbHttpProvider implements MemoryProvider {
   private readonly config: ResolvedConfig
 
   constructor(config: TencentDbHttpConfig, private readonly resolveCredential: (ref: string) => Promise<string | undefined>) {
-    if (config.baseUrl.trim().length === 0) throw new HarnessError('TencentDB baseUrl must not be empty', 'MEMORY_INVALID_REQUEST')
-    let baseUrl: URL
-    try {
-      baseUrl = new URL(config.baseUrl)
-    } catch {
-      throw new HarnessError('TencentDB baseUrl must be an absolute URL', 'MEMORY_INVALID_REQUEST')
-    }
+    const baseUrl = parseRemoteMemoryOrigin(config.baseUrl, 'TencentDB')
     if (config.credentialRef !== undefined && config.credentialRef.trim().length === 0) {
       throw new HarnessError('TencentDB credentialRef must not be empty', 'MEMORY_INVALID_REQUEST')
     }
@@ -62,23 +94,56 @@ export default class TencentDbHttpProvider implements MemoryProvider {
       throw new HarnessError('TencentDB credentialRef is required for a non-loopback Gateway', 'MEMORY_INVALID_REQUEST')
     }
     if (config.serviceId.trim().length === 0) throw new HarnessError('TencentDB serviceId must not be empty', 'MEMORY_INVALID_REQUEST')
-    if (config.teamId.trim().length === 0) throw new HarnessError('TencentDB teamId must not be empty', 'MEMORY_INVALID_REQUEST')
-    if (config.agentId.trim().length === 0) throw new HarnessError('TencentDB agentId must not be empty', 'MEMORY_INVALID_REQUEST')
-    if (config.userId.trim().length === 0) throw new HarnessError('TencentDB userId must not be empty', 'MEMORY_INVALID_REQUEST')
+    if (!Array.isArray(config.isolationBindings) || config.isolationBindings.length === 0) {
+      throw new HarnessError('TencentDB isolationBindings must not be empty', 'MEMORY_INVALID_REQUEST')
+    }
+    const isolationBindings = new Map<string, ResolvedBinding>()
+    const profileOwners = new Map<string, string>()
+    for (const [index, binding] of config.isolationBindings.entries()) {
+      if (binding.workspace.trim().length === 0 || !isAbsolute(binding.workspace)) {
+        throw new HarnessError(`TencentDB isolation binding ${String(index)} workspace must be absolute`, 'MEMORY_INVALID_REQUEST')
+      }
+      if (binding.agentPreset !== undefined && binding.agentPreset.trim().length === 0) {
+        throw new HarnessError(`TencentDB isolation binding ${String(index)} agentPreset must not be empty`, 'MEMORY_INVALID_REQUEST')
+      }
+      if (binding.teamId.trim().length === 0 || binding.agentId.trim().length === 0 || binding.userId.trim().length === 0) {
+        throw new HarnessError(`TencentDB isolation binding ${String(index)} identifiers must not be empty`, 'MEMORY_INVALID_REQUEST')
+      }
+      const workspace = resolve(binding.workspace)
+      const agentPreset = binding.agentPreset?.trim()
+      const teamId = binding.teamId.trim()
+      const agentId = binding.agentId.trim()
+      const userId = binding.userId.trim()
+      const key = bindingKey(workspace, agentPreset)
+      if (isolationBindings.has(key)) {
+        throw new HarnessError(`TencentDB isolation binding ${String(index)} duplicates a DSH workspace and agent preset`, 'MEMORY_INVALID_REQUEST')
+      }
+      const profileKey = JSON.stringify([teamId, agentId])
+      const previousOwner = profileOwners.get(profileKey)
+      if (previousOwner !== undefined) {
+        throw new HarnessError(`TencentDB isolation binding ${String(index)} reuses a Team/Agent profile owned by another DSH scope`, 'MEMORY_INVALID_REQUEST')
+      }
+      profileOwners.set(profileKey, key)
+      isolationBindings.set(key, {
+        workspace,
+        ...(agentPreset === undefined ? {} : { agentPreset }),
+        teamId: teamId as TencentDbTeamId,
+        agentId: agentId as TencentDbAgentId,
+        userId: userId as TencentDbUserId,
+      })
+    }
     const authHeader = config.authHeader ?? 'Authorization'
     if (authHeader.trim().length === 0 || ['content-type', 'x-tdai-service-id'].includes(authHeader.toLowerCase())) {
       throw new HarnessError('TencentDB authHeader is empty or collides with a protocol header', 'MEMORY_INVALID_REQUEST')
     }
     this.config = {
-      baseUrl: baseUrl.href.replace(/\/$/, ''),
+      baseUrl: baseUrl.origin,
       ...(config.credentialRef === undefined ? {} : { credentialRef: config.credentialRef }),
       serviceId: config.serviceId,
-      teamId: config.teamId,
-      agentId: config.agentId,
-      userId: config.userId,
+      isolationBindings,
       authHeader,
-      timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      maxResponseBytes: config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES,
+      timeoutMs: resolveRemoteMemoryLimit(config.timeoutMs, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, 'TencentDB', 'timeoutMs'),
+      maxResponseBytes: resolveRemoteMemoryLimit(config.maxResponseBytes, DEFAULT_MAX_RESPONSE_BYTES, MAX_RESPONSE_BYTES, 'TencentDB', 'maxResponseBytes'),
     }
   }
 
@@ -102,7 +167,7 @@ export default class TencentDbHttpProvider implements MemoryProvider {
   }
 
   private async searchAtDepth(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
-    const isolation = this.isolation()
+    const isolation = this.isolation(request)
     const depth = request.depth ?? 'L1'
     if (depth === 'L1') {
       const value = await this.post('/v3/atomic/search', { ...isolation, query: request.query, limit: request.limit }, request.signal)
@@ -137,9 +202,7 @@ export default class TencentDbHttpProvider implements MemoryProvider {
       }
     }
     const payload = {
-      team_id: this.config.teamId,
-      agent_id: this.config.agentId,
-      user_id: this.config.userId,
+      ...this.isolation(request),
       session_id: sessionId,
       messages: request.messages,
     }
@@ -159,8 +222,15 @@ export default class TencentDbHttpProvider implements MemoryProvider {
     }
   }
 
-  private isolation(): Record<string, string> {
-    return { team_id: this.config.teamId, agent_id: this.config.agentId, user_id: this.config.userId }
+  private isolation(request: Pick<MemoryProviderSearchRequest, 'workspace' | 'agentPreset'>): Record<string, string> {
+    if (!isAbsolute(request.workspace)) {
+      throw new HarnessError('TencentDB isolation requires an absolute caller workspace', 'MEMORY_UNAUTHORIZED')
+    }
+    const binding = this.config.isolationBindings.get(bindingKey(resolve(request.workspace), request.agentPreset))
+    if (binding === undefined) {
+      throw new HarnessError('TencentDB isolation is not configured for the caller workspace and agent preset', 'MEMORY_UNAUTHORIZED')
+    }
+    return { team_id: binding.teamId, agent_id: binding.agentId, user_id: binding.userId }
   }
 
   private async searchScenarios(
@@ -188,7 +258,6 @@ export default class TencentDbHttpProvider implements MemoryProvider {
   }
 
   private async post(path: string, body: Record<string, unknown>, signal: AbortSignal): Promise<Record<string, unknown>> {
-    if (signal.aborted) throw signal.reason
     const authHeaders = await this.resolveAuthHeaders()
     if (signal.aborted) throw signal.reason
     const controller = new AbortController()
@@ -202,7 +271,7 @@ export default class TencentDbHttpProvider implements MemoryProvider {
         body: JSON.stringify(body),
       })
       if (!response.ok) throw remoteFailure(response.status, 'tencentdb')
-      return parseSuccessEnvelope(await readBoundedBody(response, this.config.maxResponseBytes))
+      return parseSuccessEnvelope(await readBoundedResponseText(response, this.config.maxResponseBytes, 'TencentDB'))
     } catch (error: unknown) {
       if (error instanceof HarnessError) throw error
       if (signal.aborted) throw signal.reason
@@ -220,9 +289,15 @@ export default class TencentDbHttpProvider implements MemoryProvider {
     // no authority; non-loopback endpoints were rejected in the constructor.
     if (this.config.credentialRef === undefined) return { [this.config.authHeader]: 'Bearer dsh-local-loopback' }
     const secret = await this.resolveCredential(this.config.credentialRef)
-    if (secret === undefined) throw new HarnessError('TencentDB credential is not configured', 'MEMORY_UNAUTHORIZED')
+    if (secret === undefined || secret.trim().length === 0) {
+      throw new HarnessError('TencentDB credential is not configured', 'MEMORY_UNAUTHORIZED')
+    }
     return { [this.config.authHeader]: `Bearer ${secret}` }
   }
+}
+
+function bindingKey(workspace: string, agentPreset: string | undefined): string {
+  return JSON.stringify([workspace, agentPreset ?? null])
 }
 
 function isLoopbackHostname(hostname: string): boolean {
@@ -231,15 +306,7 @@ function isLoopbackHostname(hostname: string): boolean {
   const segments = normalized.split('.')
   return segments.length === 4
     && segments[0] === '127'
-    && segments.every(segment => /^\d{1,3}$/.test(segment) && Number(segment) <= 255)
-}
-
-async function readBoundedBody(response: Response, maxBytes: number): Promise<string> {
-  const length = response.headers.get('content-length')
-  if (length !== null && Number(length) > maxBytes) throw new HarnessError('TencentDB response exceeds configured byte limit', 'MEMORY_PROVIDER_ERROR')
-  const bytes = new Uint8Array(await response.arrayBuffer())
-  if (bytes.byteLength > maxBytes) throw new HarnessError('TencentDB response exceeds configured byte limit', 'MEMORY_PROVIDER_ERROR')
-  return Buffer.from(bytes).toString('utf8')
+    && segments.every(segment => /^\d{1,3}$/.test(segment))
 }
 
 function parseAtomicRecords(value: Record<string, unknown>): readonly TencentDbRecord[] {
@@ -296,8 +363,7 @@ function malformed(message: string): HarnessError {
   return new HarnessError(message, 'MEMORY_PROVIDER_ERROR')
 }
 
-function findRecords(value: unknown): readonly unknown[] | undefined {
-  if (!isRecord(value)) return undefined
+function findRecords(value: Record<string, unknown>): readonly unknown[] | undefined {
   if (isRecord(value.data) && Array.isArray(value.data.items)) return value.data.items
   return undefined
 }

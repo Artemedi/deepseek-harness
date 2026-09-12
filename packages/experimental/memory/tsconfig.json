@@ -9,6 +9,7 @@
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/agent" },
+    { "path": "../../preset/agent-presets" },
     { "path": "../../credentials/credentials" },
     { "path": "../../util/brand" },
     { "path": "../../llm/llm" },
