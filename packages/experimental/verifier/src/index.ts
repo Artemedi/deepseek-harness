@@ -99,7 +99,12 @@ export default class VerifierService extends Service implements VerifierProvider
     }
   }
 
-  /** Compare two bounded evidence records through the configured JSON-only provider. */
+  /**
+   * Compare two bounded evidence records through the configured JSON-only provider.
+   *
+   * @param request - Pairwise evidence and cancellation signal.
+   * @returns The validated provider preference.
+   */
   async compare(request: VerifierCompareRequest): Promise<VerifierCompareResult> {
     if (request.signal.aborted) throw request.signal.reason
     const rubric = boundedText(request.rubric, this.config.maxEvidenceBytes, 'verifier rubric')

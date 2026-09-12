@@ -1,78 +1,50 @@
-# 2026-09-05 — standard-claude default preset, claude preset, and Claude Code OAuth proxy cleanup
+# Agent Note: Standard Claude presets and Claude Code OAuth cleanup
 
-## Context
+Status: implemented
 
-The `web` profile ships a user-authored preset `standard-claude` as the default agent preset (configured in `~/.dsh/profiles/web/cordis.patch.yml`). This preset uses the **Claude Code** product provider for the `subagent` delegation tool, while `subagent_fork` remains on the local `fork` provider.
+English | [中文](2026-09-05-standard-claude-subagent-oauth.zh.md)
 
-Today `subagent` started failing with:
+## Problem
 
-```
-Product subagent failure (product: Claude Code; stage: query-run; category: invalid-success; exit code: 1)
-```
-
-The same call through `subagent_fork` succeeded.
-
-## Root cause
-
-Two layers combined to break the call:
-
-1. **Claude CLI OAuth was stale/expired.**  
-   `~/.claude/.credentials.json` had empty `accessToken`, `refreshToken`, `expiresAt: 0`, and `refreshTokenExpiresAt` in the past. Running `claude auth logout && claude auth login` refreshed the tokens and `claude -p "say hello"` then worked.
-
-2. **A dead proxy `ANTHROPIC_BASE_URL=https://api.wello.dev` was present in `~/.claude/settings.json`.**  
-   Even with valid OAuth, the CLI honours `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` from `settings.json` over the native OAuth tokens. The Wello key (`wlo_live_...`) had been rate-limited (402). Removing those env vars from `settings.json` restored the native path.
-
-The `subagent-claude-code` provider composes the child environment as:
-
-```ts
-env: { ...scrubbedParentEnv(), ...spec.env }
-```
-
-where `scrubbedParentEnv()` strips `KEY|PASSWORD|SECRET|TOKEN` and `DSH_*` names. It does **not** add the host OAuth tokens. The SDK therefore sees neither the OAuth tokens nor a valid `ANTHROPIC_BASE_URL`, and the CLI exits 1 → SDK reports `invalid-success`.
+The `web` profile uses the user-authored `standard-claude` preset as its default Agent preset. Its `subagent` tool delegates through the Claude Code product provider while `subagent_fork` remains local. A stale Claude CLI login and an obsolete proxy in the host settings caused delegated calls to exit unsuccessfully even though local forks still worked. Operators had no repository documentation that distinguished these authentication paths or explained which presets depend on Claude Code.
 
 ## Decision
 
-- Keep `standard-claude` as the default preset for the `web` profile.
-- Add a new shipped preset **`claude`** (`apps/cli/config/agent-presets/claude/`) whose both `subagent` and `subagent_fork` route to the Claude Code product provider for maximum delivery.
-- Document the working OAuth path for `subagent-claude-code`, the typical failure modes (expired OAuth, stale proxy env, missing Bundle), and how to switch between `standard` (all-local subagents) and `standard-claude`/`claude` (Claude Code subagents).
+Keep `standard-claude` available and ship the `claude` preset under `apps/cli/config/agent-presets/claude/`. The `claude` preset routes both `subagent` and `subagent_fork` through the Claude Code product provider; `standard-claude` routes only `subagent` through Claude Code; `standard` keeps both delegation paths local.
 
-## Files added / changed
+The `subagent-claude-code` provider constructs the child environment from the scrubbed parent environment and the explicit request environment:
 
-| File | Purpose |
-|------|---------|
-| `apps/cli/config/agent-presets/claude/agent.cordis.yml` | New preset: both `subagent` and `subagent_fork` route to Claude Code provider |
-| `apps/cli/config/agent-presets/claude/preset.yml` | Metadata for the new preset |
-| `packages/subagent/subagent-claude-code/README.md` | Added "Authentication and the OAuth lifecycle" section with diagnostic checklist and smoke test |
-| `.agents/notes/implemented/architecture/2026-09-05-standard-claude-subagent-oauth.md` | This note |
+```ts
+const childEnvironment = { ...scrubbedParentEnv(), ...spec.env }
+```
+
+`scrubbedParentEnv()` removes names matching credential-like keys and `DSH_*`. It does not copy OAuth tokens into the child process. Claude Code instead uses the host CLI's own settings and credential store. A stale `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN` in the Claude settings takes precedence over native OAuth and can silently route the child through an obsolete endpoint.
+
+The package README documents the OAuth lifecycle, common `invalid-success` causes, the Bundle requirement, and a safe smoke test. Operators validate the Claude CLI from the same environment that launches DSH, refresh its login when necessary, remove obsolete provider overrides, and then start a new DSH session because an Agent preset binds at session creation.
 
 ## Preset routing
 
 | Preset | Primary chat | `subagent` | `subagent_fork` | Use case |
-|--------|--------------|------------|-----------------|----------|
-| `standard` | free-router | `spawn` | `fork` | All-local, no Claude Code dependency |
-| `standard-claude` | free-router | `claude-code` | `fork` | Claude Code subagent when OAuth is valid |
-| `claude` | free-router | `claude-code` | `claude-code` | Maximum delivery when Claude Code auth is valid |
+|---|---|---|---|---|
+| `standard` | free-router | `spawn` | `fork` | Local delegation without Claude Code |
+| `standard-claude` | free-router | `claude-code` | `fork` | Claude Code for ordinary subagents, local in-process forks |
+| `claude` | free-router | `claude-code` | `claude-code` | Both delegation paths through Claude Code |
 
-## OAuth requirements for Claude Code subagents
+## Verification
 
-This deployment relies on the host Claude CLI's native OAuth. The `subagent-claude-code` provider does **not** forward host OAuth tokens to the child; the child inherits the host CLI's own settings and credentials. This is by design (see `2026-08-04-claude-code-and-codex-subagent-backends.md`).
+- `claude -p "say hello"` succeeds from the same environment that launches the DSH host.
+- `dsh plugin --profile <name> list` shows `subagent-claude-code` when a Claude-backed preset is used.
+- The profile dump resolves `standard`, `standard-claude`, and `claude` to the routing shown above.
+- A new session using the selected preset can complete the corresponding delegation call.
 
-When the host OAuth is missing, expired, or its refresh window has passed, the Claude Code subagent fails with `invalid-success`. Verify in this order:
+## Alternatives considered
 
-1. `claude -p "say hello"` from the same shell that runs the DSH host process. If this fails, fix the Claude CLI first.
-2. `cat ~/.claude/.credentials.json` — the `claudeAiOauth` block must have a non-empty `accessToken` and a future `refreshTokenExpiresAt`.
-3. `cat ~/.claude/settings.json` — make sure the `env` block does **not** carry a stale `ANTHROPIC_BASE_URL` or `ANTHROPIC_AUTH_TOKEN` pointing at a defunct upstream. Claude Code prefers those env vars over OAuth tokens and will silently route through the wrong endpoint.
-4. `dsh plugin --profile <name> list | grep subagent-claude-code` — confirm the Bundle is installed.
+**Forward host OAuth tokens explicitly.** Rejected because the product provider deliberately relies on the Claude CLI's credential store and scrubs credential-like parent variables. Copying raw OAuth material into child environment variables would widen secret exposure and duplicate the CLI's refresh lifecycle.
 
-## How to switch presets
+**Route every preset through Claude Code.** Rejected because `standard` must remain usable without an external Claude Code login, and `standard-claude` intentionally retains a local fork path.
 
-- In the DSH Web UI: Settings → Agent preset → choose `standard`, `standard-claude`, or `claude`.
-- From a running session: preset change requires a new session; the preset binds at session start.
+**Keep the obsolete proxy as a fallback.** Rejected because Claude Code gives configured provider overrides precedence over native OAuth. A dead or rate-limited endpoint therefore breaks otherwise valid host authentication instead of providing redundancy.
 
 ## Consequences
 
-The `standard-claude` preset remains available when the operator wants Claude Code for subagents, but it now has explicit documentation for the OAuth dependency. The `claude` preset routes both delegation tools to Claude Code for maximum delivery. The `standard` preset remains the safest fallback when Claude Code auth is unavailable.
-
-## Next steps
-
-- Consider adding an explicit `env` forwarding option to `subagent-claude-code` for hermetic runs (deferred).
+Operators can choose local delegation, a mixed route, or an all-Claude route explicitly. Claude-backed presets depend on a healthy host Claude CLI login and clean provider settings, while `standard` remains the fallback when Claude Code authentication is unavailable. Authentication changes take effect for new sessions rather than mutating an already composed Agent.

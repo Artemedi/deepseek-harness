@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-experimental-tool-verifier
 
+English | [中文](README.zh.md)
+
 `@deepseek-ai/dsh-experimental-tool-verifier` registers the explicit model-facing `verify_pair` tool over `ctx.verifier`. It compares two caller-supplied evidence records against a rubric and returns the schema-validated `score-v1` result. It does not run deterministic checks, edit files, select a winner, or complete a goal.
 
 ## Model Experience

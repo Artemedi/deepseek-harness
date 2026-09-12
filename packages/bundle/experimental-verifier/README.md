@@ -1,5 +1,7 @@
 # Experimental Verifier Bundle
 
+English | [中文](README.zh.md)
+
 `@deepseek-ai/dsh-experimental-verifier-bundle` is a private opt-in DSH profile bundle. It installs the experimental verifier service and explicit `verify_pair` tool into the selected profile. It is not part of the base, headless, or Web bundles.
 
 ## Installation

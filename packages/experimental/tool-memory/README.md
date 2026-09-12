@@ -1,5 +1,7 @@
 # Experimental Memory Tool
 
+English | [中文](README.zh.md)
+
 `@deepseek-ai/dsh-experimental-tool-memory` registers `memory_search` over `ctx.memory` when explicitly composed. The tool requires a calling Agent, records a `memory/search` event in that session, and returns the same bounded citation list.
 
 ## Model Experience

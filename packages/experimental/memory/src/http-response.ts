@@ -3,7 +3,13 @@
 import { Buffer } from 'node:buffer'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 
-/** Parse one configuration value as an HTTP(S) origin without embedded authority or path state. */
+/**
+ * Parse one configuration value as an HTTP(S) origin without embedded authority or path state.
+ *
+ * @param raw - Configuration value to parse.
+ * @param provider - Provider name used in validation errors.
+ * @returns The validated HTTP(S) origin.
+ */
 export function parseRemoteMemoryOrigin(raw: string, provider: 'OpenViking' | 'TencentDB'): URL {
   let url: URL
   try {
@@ -19,7 +25,16 @@ export function parseRemoteMemoryOrigin(raw: string, provider: 'OpenViking' | 'T
   return url
 }
 
-/** Resolve one public HTTP limit consistently with the composition schema. */
+/**
+ * Resolve one public HTTP limit consistently with the composition schema.
+ *
+ * @param value - Direct-constructor override, when supplied.
+ * @param fallback - Default applied when the override is absent.
+ * @param maximum - Largest accepted value.
+ * @param provider - Provider name used in validation errors.
+ * @param field - Configuration field name used in validation errors.
+ * @returns The validated limit.
+ */
 export function resolveRemoteMemoryLimit(
   value: number | undefined,
   fallback: number,
@@ -34,7 +49,14 @@ export function resolveRemoteMemoryLimit(
   return resolved
 }
 
-/** Read decoded response bytes without buffering past the configured limit. */
+/**
+ * Read decoded response bytes without buffering past the configured limit.
+ *
+ * @param response - HTTP response whose body is consumed.
+ * @param maxBytes - Maximum decoded byte count to buffer.
+ * @param provider - Provider name used in overflow errors.
+ * @returns The UTF-8 response text.
+ */
 export async function readBoundedResponseText(
   response: Response,
   maxBytes: number,

@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-experimental-verifier
 
+English | [中文](README.zh.md)
+
 `@deepseek-ai/dsh-experimental-verifier` provides an opt-in JSON-only pairwise verifier service. It resolves an API-key reference through `ctx.credentials`, sends a bounded OpenAI-compatible structured-output request, rejects redirects, and validates the complete `score-v1` result before returning it.
 
 ## Model Experience

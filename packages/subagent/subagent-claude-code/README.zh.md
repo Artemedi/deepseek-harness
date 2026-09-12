@@ -53,6 +53,47 @@ dsh --profile <name>
 
 下列独立组装展示完整的显式能力。基于 `@deepseek-ai/dsh-base` 的 Profile 保留已有 Job 配置项，新增产品提供方与工具配置项，而且不重复挂载 Job 服务。
 
+## 认证与 OAuth 生命周期
+
+Bundle 提供 SDK 平台载荷；**身份验证和账户状态由 Claude Code 原生管理**，保存在宿主的用户、项目与本地设置中，OAuth token 则保存在 `~/.claude/.credentials.json`。本包不会登录、刷新 token 或重写 Claude 设置。
+
+当宿主 OAuth 缺失、过期或超过刷新窗口时，Claude Code subagent 会以 `subagent run failed` 错误失败，其诊断为：
+
+```
+Product subagent failure (product: Claude Code; stage: query-run; category: invalid-success; exit code: 1)
+```
+
+当宿主的 `ANTHROPIC_AUTH_TOKEN` 指向失效或被限流的代理时，也会报告相同的 `invalid-success`，因为 SDK 此时没有可用凭据且 CLI 以非零状态退出。按以下顺序验证：
+
+1. 从运行 DSH host 进程的同一 shell 执行 `claude -p "say hello"`。如果失败，先修复 Claude CLI；DSH subagent 只会继承该状态。
+2. 检查 `~/.claude/.credentials.json`：`claudeAiOauth` block 必须包含非空 `accessToken`，且 `refreshTokenExpiresAt` 应在未来（默认订阅为 Pro）。任一字段为空或过期时，重新运行 `claude auth login`。
+3. 运行 `claude auth status` 并检查 `~/.claude/settings.json`，确保 `env` block **不包含**指向失效 upstream 的过期 `ANTHROPIC_BASE_URL` 或 `ANTHROPIC_AUTH_TOKEN`。Claude Code 会优先使用这些环境变量而不是 OAuth token，并可能在无提示的情况下路由到错误 endpoint，产生相同的 `invalid-success`。
+4. 运行 `dsh plugin --profile <name> list | grep subagent-claude-code`，确认 Bundle 已安装且 host provider 已注册；即使 Bundle 处于休眠状态，此处的失败仍可能来自 OAuth。
+
+修复后的通过 smoke test：
+
+```sh
+# 1. CLI works locally
+claude -p "say hello"
+
+# 2. DSH registers the host provider
+dsh --profile <name> --dump-config | grep -A 4 'subagent-claude-code'
+
+# 3. Drive a foreground subagent from any session
+```
+
+如果第 1 步成功但 DSH subagent 仍然失败，请捕获该 session 的 `tool/result` 文本和 `subagent/started` / `subagent/finished` event；此时故障已不属于 OAuth，而属于单次运行的 SDK query。
+
+## Preset 比较
+
+| Preset | Primary chat | `subagent` | `subagent_fork` | 适用场景 |
+| --- | --- | --- | --- | --- |
+| `standard` | free-router | `spawn` | `fork` | 全本地运行，不依赖 Claude Code |
+| `standard-claude` | free-router | `claude-code` | `fork` | OAuth 有效时使用 Claude Code subagent |
+| `claude` | free-router | `claude-code` | `claude-code` | chat 与 subagent 都使用 Claude CLI 以获得最大交付能力 |
+
+要获得最大交付能力，请使用 `claude` preset，并在 session 中调用 `subagent` / `subagent_fork`。primary chat 仍通过 `free-router` 路由；委派运行使用 Claude Code CLI。必须具备有效 OAuth 和干净的 `~/.claude/settings.json`。
+
 ```yaml
 - id: subagent-claude-safe
   name: '@deepseek-ai/dsh-subagent-claude-code'
