@@ -54,7 +54,9 @@ class RemoteFakeSubprocess extends FakeSubprocess {
 
 const provider = {
   baseUrl: 'http://127.0.0.1:8420', serviceId: 'default',
-  teamId: 'default', agentId: 'default', userId: 'default',
+  isolationBindings: [{
+    workspace: '/workspace', teamId: 'default', agentId: 'default', userId: 'default',
+  }],
 }
 
 const runtime = {

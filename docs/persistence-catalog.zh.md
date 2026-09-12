@@ -500,6 +500,63 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
 
+### `memory/*`
+
+<a id="memorycapture-failed--log-only"></a>
+
+#### `memory/capture-failed` — log-only
+
+```ts persistence-catalog
+/** Safe failure class recorded after one requested TencentDB turn export fails. */
+'memory/capture-failed': MemoryCaptureFailedEvent
+```
+
+来源：[`packages/experimental/memory/src/types.ts:165`](../packages/experimental/memory/src/types.ts)
+
+<a id="memorycapture-requested--log-only"></a>
+
+#### `memory/capture-requested` — log-only
+
+```ts persistence-catalog
+/** Intent durably flushed before exporting one completed turn to TencentDB. */
+'memory/capture-requested': MemoryCaptureRequestedEvent
+```
+
+来源：[`packages/experimental/memory/src/types.ts:161`](../packages/experimental/memory/src/types.ts)
+
+<a id="memorycapture-succeeded--log-only"></a>
+
+#### `memory/capture-succeeded` — log-only
+
+```ts persistence-catalog
+/** Confirmation that TencentDB accepted every message from one exported turn. */
+'memory/capture-succeeded': MemoryCaptureSucceededEvent
+```
+
+来源：[`packages/experimental/memory/src/types.ts:163`](../packages/experimental/memory/src/types.ts)
+
+<a id="memoryrecall-failed--log-only"></a>
+
+#### `memory/recall-failed` — log-only
+
+```ts persistence-catalog
+/** Safe per-layer recall failure that does not block the owning model turn. */
+'memory/recall-failed': MemoryRecallFailedEvent
+```
+
+来源：[`packages/experimental/memory/src/types.ts:167`](../packages/experimental/memory/src/types.ts)
+
+<a id="memorysearch--log-only"></a>
+
+#### `memory/search` — log-only
+
+```ts persistence-catalog
+/** Exact bounded citations returned by one explicit memory search. */
+'memory/search': MemorySearchEvent
+```
+
+来源：[`packages/experimental/memory/src/types.ts:159`](../packages/experimental/memory/src/types.ts)
+
 ### `permission/*`
 
 <a id="permissionpreset--log-only"></a>

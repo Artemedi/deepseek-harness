@@ -71,7 +71,7 @@ describe('automatic TencentDB recall through a real headless AgentLoop', () => {
       body: { team_id: 'team-1', agent_id: 'agent-1', user_id: 'user-1', query: 'Use remembered package guidance.' },
     })
 
-    const projection = events.flatMap((event) => {
+    const projection: unknown[] = events.flatMap<unknown>((event) => {
       if (event.type === 'memory/search') return [{ type: event.type, data: { ...event.data, workspace: '<workspace>' } }]
       if (event.type === 'step/start' || event.type === 'request/context') return [{ type: event.type }]
       if (event.type === 'user/message' && event.data.source.kind === 'plugin') {

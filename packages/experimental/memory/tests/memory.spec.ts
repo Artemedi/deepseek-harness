@@ -1,15 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
+import AgentRegistry, { agentEvents, Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import type { SessionEventSearchDocument, SessionRecord } from '@deepseek-ai/dsh-session-query'
 import MemoryService from '@deepseek-ai/dsh-experimental-memory'
-import type { Config } from '@deepseek-ai/dsh-experimental-memory'
+import type { Config, MemoryProvider } from '@deepseek-ai/dsh-experimental-memory'
 import { MemoryCredentials } from '../../../credentials/credentials/tests/memory.ts'
-import { createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, createUserMessage, HarnessError } from '@deepseek-ai/dsh-llm'
+
+const isolationBindings = [{
+  workspace: '/workspace/a', teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+}]
 
 class TestQuery extends SessionQueryEngine {
   private readonly records: SessionRecord[]
@@ -70,7 +74,10 @@ async function setup(cwd?: string, documentText = 'gateway retry evidence', conf
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
-  if (config?.tencentdb?.credentialRef !== undefined) await ctx.plugin(MemoryCredentials, { TENCENT_KEY: 'secret-value' })
+  const credentialValues: Record<string, string> = {}
+  if (config?.tencentdb?.credentialRef !== undefined) credentialValues.TENCENT_KEY = 'secret-value'
+  if (config?.openviking?.credentialRef !== undefined) credentialValues.OPENVIKING_KEY = 'secret-value'
+  if (Object.keys(credentialValues).length > 0) await ctx.plugin(MemoryCredentials, credentialValues)
   const source = SessionId('memory-source')
   await ctx.plugin(class QueryPlugin extends TestQuery {
     constructor(owner: Context) {
@@ -114,6 +121,8 @@ describe('MemoryService', () => {
       .rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await expect(bounded.service.search(bounded.agent, { query: 'x', limit: 21, signal: new AbortController().signal }))
       .rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    await expect(bounded.service.search(bounded.agent, { query: 'x', maxContentBytes: 32_769, signal: new AbortController().signal }))
+      .rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await bounded.ctx.fiber.dispose()
   })
 
@@ -132,9 +141,54 @@ describe('MemoryService', () => {
     await ctx.fiber.dispose()
   })
 
+  it('serves an explicitly configured OpenViking route through DSH credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ Authorization: 'Bearer secret-value' })
+      return new Response(JSON.stringify({ result: { memories: [] } }), { status: 200 })
+    }))
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'openviking'],
+      openviking: { baseUrl: 'https://viking.example', credentialRef: 'OPENVIKING_KEY' },
+    })
+    await expect(service.search(agent, {
+      provider: 'openviking', depth: 'L1', query: 'retry', signal: new AbortController().signal,
+    })).resolves.toMatchObject({ provider: 'openviking', hits: [] })
+    await ctx.fiber.dispose()
+    vi.unstubAllGlobals()
+  })
+
   it('rejects an enabled TencentDB route without connection and isolation configuration', async () => {
     await expect(setup('/workspace/a', 'unused', { providers: ['local', 'tencentdb'] }))
       .rejects.toThrow('TencentDB provider configuration is required')
+  })
+
+  it('rejects incomplete managed and automatic provider combinations', async () => {
+    const runtime = {
+      command: 'node', cwd: '/runtime', dataDir: '/data', llmCredentialRef: 'LLM_KEY',
+      llmBaseUrl: 'https://llm.example/v1', llmModel: 'model',
+    }
+    await expect(setup('/workspace/a', 'unused', { providers: ['local'], tencentdbRuntime: runtime }))
+      .rejects.toThrow('managed TencentDB MemoryCore requires TencentDB provider configuration')
+    await expect(setup('/workspace/a', 'unused', {
+      providers: ['local'], tencentdbRuntime: runtime,
+      tencentdb: { baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings },
+    })).rejects.toThrow('managed TencentDB MemoryCore requires the TencentDB provider route')
+    await expect(setup('/workspace/a', 'unused', { providers: ['local'], automaticCapture: true }))
+      .rejects.toThrow('automatic memory capture requires the TencentDB provider')
+    await expect(setup('/workspace/a', 'unused', { providers: ['local'], automaticRecall: true }))
+      .rejects.toThrow('automatic memory recall requires the TencentDB provider')
+  })
+
+  it.each([
+    [[] as Array<'L1' | 'L2' | 'L3'>, 'non-empty and unique'],
+    [['L1', 'L1'] as Array<'L1' | 'L2' | 'L3'>, 'non-empty and unique'],
+  ])('rejects invalid automatic recall depths %j', async (automaticRecallDepths, message) => {
+    await expect(setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticRecall: true, automaticRecallDepths,
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+      },
+    })).rejects.toThrow(message)
   })
 
   it('captures through the enabled provider with the live Agent session identity', async () => {
@@ -150,7 +204,7 @@ describe('MemoryService', () => {
       providers: ['local', 'tencentdb'],
       tencentdb: {
         baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+        isolationBindings,
       },
     })
     await expect(service.capture(agent, {
@@ -158,6 +212,63 @@ describe('MemoryService', () => {
     })).resolves.toBeUndefined()
     await ctx.fiber.dispose()
     vi.unstubAllGlobals()
+  })
+
+  it('maps a session through its latest durable agent-preset selection', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        team_id: 'team-minimal', agent_id: 'agent-minimal', user_id: 'user-1',
+        session_id: 'memory-owner',
+      })
+      return new Response(JSON.stringify({
+        code: 0, data: { accepted_ids: ['message-1'], accepted_versions: ['v1'], total_count: 1 },
+      }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'],
+      tencentdb: {
+        baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+        isolationBindings: [{
+          workspace: '/workspace/a', agentPreset: 'minimal',
+          teamId: 'team-minimal', agentId: 'agent-minimal', userId: 'user-1',
+        }],
+      },
+    })
+    agent.session.append('agent-preset/selected', { agentPreset: 'minimal' })
+
+    await expect(service.capture(agent, {
+      messages: [{ role: 'user', content: 'remember this' }], signal: new AbortController().signal,
+    })).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await ctx.fiber.dispose()
+    vi.unstubAllGlobals()
+  })
+
+  it('passes the latest durable preset to provider search', async () => {
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'],
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1',
+        isolationBindings: [{
+          workspace: '/workspace/a', agentPreset: 'minimal',
+          teamId: 'team-minimal', agentId: 'agent-minimal', userId: 'user-1',
+        }],
+      },
+    })
+    agent.session.append('agent-preset/selected', { agentPreset: 'minimal' })
+    const providers = Reflect.get(service, 'providers') as Map<string, MemoryProvider>
+    providers.set('tencentdb', {
+      id: 'tencentdb',
+      async search(request) {
+        expect(request.agentPreset).toBe('minimal')
+        return []
+      },
+    })
+    await expect(service.search(agent, {
+      provider: 'tencentdb', query: 'q', signal: new AbortController().signal,
+    })).resolves.toMatchObject({ hits: [] })
+    await ctx.fiber.dispose()
   })
 
   it('uses a loopback TencentDB provider without a credentials service', async () => {
@@ -173,7 +284,7 @@ describe('MemoryService', () => {
       providers: ['local', 'tencentdb'],
       tencentdb: {
         baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1',
-        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+        isolationBindings,
       },
     })
     await expect(service.capture(agent, {
@@ -188,7 +299,7 @@ describe('MemoryService', () => {
       providers: ['local', 'tencentdb'],
       tencentdb: {
         baseUrl: 'https://memory.example', serviceId: 'memory-1',
-        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+        isolationBindings,
       },
     })).rejects.toThrow('credentialRef is required for a non-loopback Gateway')
   })
@@ -209,7 +320,7 @@ describe('MemoryService', () => {
       providers: ['local', 'tencentdb'], automaticCapture: true,
       tencentdb: {
         baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+        isolationBindings,
       },
     })
     expect(Reflect.get(service, 'config')).toMatchObject({ automaticCapture: true })
@@ -233,6 +344,95 @@ describe('MemoryService', () => {
     vi.unstubAllGlobals()
   })
 
+  it('drives automatic capture only on idle and contains maintenance rejection', async () => {
+    const { ctx, agent } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticCapture: true,
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+      },
+    })
+    const maintenance = vi.spyOn(agent, 'runMaintenance')
+    agentEvents(ctx, agent).emit('agent/status', { status: 'running' })
+    expect(maintenance).not.toHaveBeenCalled()
+    agentEvents(ctx, agent).emit('agent/status', { status: 'idle' })
+    await vi.waitFor(() => expect(maintenance).toHaveBeenCalledOnce())
+
+    maintenance.mockImplementationOnce(async () => { throw new Error('maintenance failed') })
+    const warning = vi.spyOn(ctx.logger, 'warn')
+    agentEvents(ctx, agent).emit('agent/status', { status: 'idle' })
+    await vi.waitFor(() => expect(warning).toHaveBeenCalledWith(expect.stringContaining('maintenance failed')))
+    await ctx.fiber.dispose()
+  })
+
+  it('skips already captured and empty turns and honors capture-pass cancellation', async () => {
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'],
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+      },
+    })
+    agent.session.append('turn/start', { turn: 1 })
+    agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    agent.session.append('memory/capture-succeeded', { version: 1, provider: 'tencentdb', turn: 1 })
+    agent.session.append('turn/start', { turn: 2 })
+    agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: ' ' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    agent.session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
+    await expect(service.captureCompletedTurns(agent, new AbortController().signal)).resolves.toBeUndefined()
+    expect(agent.session.events.filter(event => event.type === 'memory/capture-requested')).toHaveLength(0)
+
+    const cancelled = new AbortController()
+    cancelled.abort(new Error('capture pass cancelled'))
+    await expect(service.captureCompletedTurns(agent, cancelled.signal)).rejects.toThrow('capture pass cancelled')
+    await ctx.fiber.dispose()
+  })
+
+  it('records every allowed provider failure class during capture', async () => {
+    const cases: Array<[string, Error]> = [
+      ['MEMORY_INVALID_REQUEST', new HarnessError('safe failure', 'MEMORY_INVALID_REQUEST')],
+      ['MEMORY_STALE_AGENT', new HarnessError('safe failure', 'MEMORY_STALE_AGENT')],
+      ['MEMORY_UNAUTHORIZED', new HarnessError('safe failure', 'MEMORY_UNAUTHORIZED')],
+      ['MEMORY_RETRYABLE', new HarnessError('safe failure', 'MEMORY_RETRYABLE')],
+      ['MEMORY_PROVIDER_ERROR', new Error('ordinary failure')],
+    ]
+    for (const [code, error] of cases) {
+      const current = await setup('/workspace/a', 'unused', {
+        providers: ['local', 'tencentdb'],
+        tencentdb: {
+          baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+        },
+      })
+      current.agent.session.append('step/start', { turn: 3, step: 1 })
+      current.agent.session.append('turn/start', { turn: 3 })
+      current.agent.session.append('user/message', createUserMessage({
+        content: [
+          { type: 'reasoning', text: 'hidden' },
+          { type: 'text', text: 'remember failure class' },
+        ],
+        source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+      current.agent.session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: 'synthetic' }],
+        source: { kind: 'plugin', plugin: 'test', form: 'snapshot', sections: [] },
+      }), { surfaceOp: 'append' })
+      current.agent.session.append('assistant/message', {
+        turn: 3, step: 1,
+        message: createAssistantMessage({ content: [{ type: 'text', text: ' ' }], source: { provider: 'mock', model: 'mock' } }),
+      }, { surfaceOp: 'append', sourceEventSeqs: [] })
+      current.agent.session.append('turn/end', { turn: 3, reason: { kind: 'max-tokens' } })
+      const providers = Reflect.get(current.service, 'providers') as Map<string, MemoryProvider>
+      providers.set('tencentdb', {
+        id: 'tencentdb',
+        async search() { return [] },
+        async capture() { throw error },
+      })
+      await current.service.captureCompletedTurns(current.agent, new AbortController().signal)
+      expect(current.agent.session.events.findLast(event => event.type === 'memory/capture-failed')?.data.code).toBe(code)
+      await current.ctx.fiber.dispose()
+    }
+  })
+
   it('logs automatic recall before returning explicitly untrusted model context', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       code: 0, message: 'ok', request_id: 'recall-1',
@@ -242,7 +442,7 @@ describe('MemoryService', () => {
       providers: ['local', 'tencentdb'], automaticRecall: true,
       tencentdb: {
         baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+        isolationBindings,
       },
     })
     const recalled = await service.recallForStep(agent, [createUserMessage({
@@ -258,13 +458,63 @@ describe('MemoryService', () => {
     vi.unstubAllGlobals()
   })
 
+  it('intercepts only an eligible first step and preserves downstream decisions otherwise', async () => {
+    const { ctx, agent } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticRecall: true,
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+      },
+    })
+    const signal = new AbortController().signal
+    const rejected = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step', { messages: [], turn: 1, step: 1, signal },
+      () => Promise.resolve({ kind: 'reject' }),
+    )
+    expect(rejected.kind).toBe('reject')
+    const later = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step', { messages: [], turn: 1, step: 2, signal },
+      () => Promise.resolve({ kind: 'enter', messages: [] }),
+    )
+    expect(later).toEqual({ kind: 'enter', messages: [] })
+    const controller = new AbortController()
+    controller.abort(new Error('step cancelled'))
+    const cancelled = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step', { messages: [], turn: 1, step: 1, signal: controller.signal },
+      () => Promise.resolve({ kind: 'enter', messages: [] }),
+    )
+    expect(cancelled).toEqual({ kind: 'enter', messages: [] })
+    const noQuery = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step', { messages: [], turn: 1, step: 1, signal },
+      () => Promise.resolve({ kind: 'enter', messages: [] }),
+    )
+    expect(noQuery).toEqual({ kind: 'enter', messages: [] })
+
+    const providers = Reflect.get(ctx.memory, 'providers') as Map<string, MemoryProvider>
+    providers.set('tencentdb', {
+      id: 'tencentdb',
+      async search() {
+        return [{ id: 'fallback-id', kind: 'memory', content: 'fallback title content', source: 'test' }] as never
+      },
+    })
+    const user = createUserMessage({ content: [{ type: 'text', text: 'q' }], source: { kind: 'user' } })
+    const entered = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step', { messages: [user], turn: 1, step: 1, signal },
+      () => Promise.resolve({ kind: 'enter', messages: [user] }),
+    )
+    expect(entered).toMatchObject({
+      kind: 'enter',
+      messages: [{ content: [{ text: expect.stringContaining('[fallback-id] fallback title content') }] }, user],
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('records automatic recall failure without rejecting the model step', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
     const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
       providers: ['local', 'tencentdb'], automaticRecall: true,
       tencentdb: {
         baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+        isolationBindings,
       },
     })
     await expect(service.recallForStep(agent, [createUserMessage({
@@ -272,6 +522,27 @@ describe('MemoryService', () => {
     })], new AbortController().signal)).resolves.toBeUndefined()
     expect(agent.session.events.findLast(event => event.type === 'memory/recall-failed')?.data)
       .toEqual({ version: 1, provider: 'tencentdb', code: 'MEMORY_PROVIDER_UNAVAILABLE', depth: 'L1' })
+    await ctx.fiber.dispose()
+    vi.unstubAllGlobals()
+  })
+
+  it('redacts unknown provider error codes from durable recall diagnostics', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new HarnessError('credential detail must not be persisted', 'SECRET tenant-token')
+    }))
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticRecall: true,
+      tencentdb: {
+        baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+        isolationBindings,
+      },
+    })
+    await expect(service.recallForStep(agent, [createUserMessage({
+      content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' },
+    })], new AbortController().signal)).resolves.toBeUndefined()
+    expect(agent.session.events.findLast(event => event.type === 'memory/recall-failed')?.data)
+      .toEqual({ version: 1, provider: 'tencentdb', code: 'MEMORY_PROVIDER_ERROR', depth: 'L1' })
+    expect(JSON.stringify(agent.session.events)).not.toContain('tenant-token')
     await ctx.fiber.dispose()
     vi.unstubAllGlobals()
   })
@@ -287,7 +558,7 @@ describe('MemoryService', () => {
       providers: ['local', 'tencentdb'], automaticRecall: true, automaticRecallDepths: ['L1', 'L3'], defaultLimit: 2,
       tencentdb: {
         baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+        isolationBindings,
       },
     })
     const recalled = await service.recallForStep(agent, [createUserMessage({
@@ -314,7 +585,7 @@ describe('MemoryService', () => {
       automaticRecallDepths: ['L1', 'L2', 'L3'], defaultLimit: 3, defaultMaxContentBytes: 5,
       tencentdb: {
         baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-        teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+        isolationBindings,
       },
     })
     await expect(service.recallForStep(agent, [createUserMessage({
@@ -329,11 +600,126 @@ describe('MemoryService', () => {
     vi.unstubAllGlobals()
   })
 
+  it('stops layered recall at the shared hit or byte limit and logs an empty successful search', async () => {
+    for (const config of [
+      { defaultLimit: 1, defaultMaxContentBytes: 10 },
+      { defaultLimit: 3, defaultMaxContentBytes: 1 },
+    ]) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+        code: 0, data: { items: [{ id: 'one', type: 'fact', content: 'x' }] },
+      }), { status: 200 })))
+      const current = await setup('/workspace/a', 'unused', {
+        providers: ['local', 'tencentdb'], automaticRecall: true,
+        automaticRecallDepths: ['L1', 'L2'], ...config,
+        tencentdb: {
+          baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+        },
+      })
+      await expect(current.service.recallForStep(current.agent, [createUserMessage({
+        content: [{ type: 'text', text: 'q' }], source: { kind: 'user' },
+      })], new AbortController().signal)).resolves.toBeDefined()
+      await current.ctx.fiber.dispose()
+    }
+
+    const empty = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticRecall: true,
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+      },
+    })
+    const providers = Reflect.get(empty.service, 'providers') as Map<string, MemoryProvider>
+    providers.set('tencentdb', { id: 'tencentdb', async search() { return [] } })
+    await expect(empty.service.recallForStep(empty.agent, [createUserMessage({
+      content: [{ type: 'text', text: 'q' }], source: { kind: 'user' },
+    })], new AbortController().signal)).resolves.toBeUndefined()
+    expect(empty.agent.session.events.findLast(event => event.type === 'memory/search')).toBeDefined()
+    await empty.ctx.fiber.dispose()
+    vi.unstubAllGlobals()
+  })
+
+  it('propagates cancellation from recall and ignores messages without direct text', async () => {
+    const current = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'], automaticRecall: true,
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+      },
+    })
+    await expect(current.service.recallForStep(current.agent, [], new AbortController().signal))
+      .resolves.toBeUndefined()
+    await expect(current.service.recallForStep(current.agent, [createUserMessage({
+      content: [{ type: 'reasoning', text: 'hidden' }], source: { kind: 'user' },
+    })], new AbortController().signal)).resolves.toBeUndefined()
+    await expect(current.service.recallForStep(current.agent, [createUserMessage({
+      content: [{ type: 'text', text: 'plugin text' }],
+      source: { kind: 'plugin', plugin: 'test', form: 'snapshot', sections: [] },
+    })], new AbortController().signal)).resolves.toBeUndefined()
+
+    const controller = new AbortController()
+    const providers = Reflect.get(current.service, 'providers') as Map<string, MemoryProvider>
+    providers.set('tencentdb', {
+      id: 'tencentdb',
+      async search() {
+        controller.abort(new Error('recall cancelled'))
+        throw controller.signal.reason
+      },
+    })
+    await expect(current.service.recallForStep(current.agent, [createUserMessage({
+      content: [{ type: 'text', text: 'q' }], source: { kind: 'user' },
+    })], controller.signal)).rejects.toThrow('recall cancelled')
+    await current.ctx.fiber.dispose()
+  })
+
   it('requires explicit OpenViking depth', async () => {
     const { ctx, agent, service } = await setup('/workspace/stub', 'unused', { providers: ['local', 'openviking'] })
     await expect(service.search(agent, { provider: 'openviking', query: 'retry', signal: new AbortController().signal }))
       .rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await ctx.fiber.dispose()
+  })
+
+  it('rejects unsupported provider/depth combinations and capture callers', async () => {
+    const { ctx, agent, service, disposeAgent } = await setup('/workspace/a')
+    await expect(service.search(agent, {
+      provider: 'unknown' as 'local', query: 'x', signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+    await expect(service.search(agent, {
+      provider: 'local', depth: 'L1', query: 'x', signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    await expect(service.capture(agent, {
+      provider: 'local' as 'tencentdb', messages: [], signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+    disposeAgent()
+    await expect(service.capture(agent, {
+      messages: [], signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: 'MEMORY_STALE_AGENT' })
+    await ctx.fiber.dispose()
+
+    const missing = await setup()
+    await expect(missing.service.capture(missing.agent, {
+      messages: [], signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
+    await missing.ctx.fiber.dispose()
+
+    const configured = await setup('/workspace/a', 'unused', { providers: ['local', 'openviking'] })
+    await expect(configured.service.search(configured.agent, {
+      provider: 'openviking', depth: 'L3', query: 'x', signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    await configured.ctx.fiber.dispose()
+
+    const tencent = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'],
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+      },
+    })
+    await expect(tencent.service.search(tencent.agent, {
+      provider: 'tencentdb', depth: 'L0', query: 'x', signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    const cancelled = new AbortController()
+    cancelled.abort(new Error('capture cancelled'))
+    await expect(tencent.service.capture(tencent.agent, {
+      messages: [], signal: cancelled.signal,
+    })).rejects.toThrow('capture cancelled')
+    await tencent.ctx.fiber.dispose()
   })
 
   it('resolves defaults and canonical query without optional undefined fields', async () => {
@@ -362,6 +748,29 @@ describe('MemoryService', () => {
     await ctx.fiber.dispose()
   })
 
+  it('stops local search when cancellation lands after session filtering and skips empty documents', async () => {
+    const current = await setup('/workspace/a')
+    const controller = new AbortController()
+    const originalSessions = current.ctx.sessionQuery.filterSessions.bind(current.ctx.sessionQuery)
+    vi.spyOn(current.ctx.sessionQuery, 'filterSessions').mockImplementation(async (...args) => {
+      const records = await originalSessions(...args)
+      controller.abort(new Error('cancelled after session filter'))
+      return records
+    })
+    await expect(current.service.search(current.agent, { query: 'retry', signal: controller.signal }))
+      .rejects.toThrow('cancelled after session filter')
+    await current.ctx.fiber.dispose()
+
+    const empty = await setup('/workspace/a')
+    vi.spyOn(empty.ctx.sessionQuery, 'filterEvents').mockResolvedValue([{
+      sessionId: SessionId('memory-source'), seq: 1, type: 'user/message', time: 1, surface: 'current', text: ' ',
+    }])
+    await expect(empty.service.search(empty.agent, {
+      query: 'retry', signal: new AbortController().signal,
+    })).resolves.toMatchObject({ hits: [] })
+    await empty.ctx.fiber.dispose()
+  })
+
   it('enforces the aggregate citation cap in UTF-8 bytes', async () => {
     const text = 'retry восстановлен'
     const bytes = Buffer.byteLength(text, 'utf8')
@@ -376,5 +785,13 @@ describe('MemoryService', () => {
       query: 'retry', maxContentBytes: bytes, signal: new AbortController().signal,
     })).resolves.toMatchObject({ hits: [{ content: text }] })
     await exact.ctx.fiber.dispose()
+  })
+
+  it('finishes local search normally when one hit leaves unused capacity', async () => {
+    const current = await setup('/workspace/a')
+    await expect(current.service.search(current.agent, {
+      query: 'retry', limit: 2, maxContentBytes: 100, signal: new AbortController().signal,
+    })).resolves.toMatchObject({ hits: [{ content: 'gateway retry evidence' }] })
+    await current.ctx.fiber.dispose()
   })
 })
