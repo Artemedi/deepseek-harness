@@ -33,6 +33,15 @@
 
 ## Gotchas carried forward
 
+- `node` is not on `PATH` by default in a fresh `bash` tool call, even though
+  `pnpm`, `git`, etc. are — `node: команда не найдена` / exit 127 masquerades
+  as a build failure. Load it via `fnm` first: `export PATH="/home/Trintos/.local/share/fnm:$PATH" && eval "$(fnm env --shell bash)"`,
+  in the **same** command as anything that needs it, including `git commit`
+  (the pre-commit lint hook shells out to `node` too and fails otherwise).
+  Prefer `npx vitest run <path>` from the repo root over
+  `pnpm --filter <pkg> exec vitest`: the filtered form resolves the
+  `thread-safe`/`process-bound` workspace-project split incorrectly and
+  reports "No test files found" for suites that spawn real subprocesses.
 - `bwrap` (bubblewrap) is not available in this sandbox
   (`spawn bwrap ENOENT` — observed during early exploration). Anything relying
   on nested `sandbox-exec`/`bwrap` will fail; use host escalation only if a

@@ -1,55 +1,46 @@
-# Handoff (обновлено: 2026-09-12)
+# Handoff (обновлено: 2026-09-13)
 
 ## Текущая задача
 
-Довести TencentDB Agent Memory от экспериментального search provider до полезной native-интеграции. Активный план: [experimental-memory-search.md](plans/experimental-memory-search.md).
+Forensic-анализ интеграции внешнего локального гейтвея "9router" с DSH subagent-делегированием (пользователь: расход основной квоты подозрительно высок при инструкции "используй для сабагентов бесплатные модели 9router"; часть сессий падала с ошибками). Полный отчёт (Observed architecture / Evidence / Confirmed & Suspected problems / Token accounting / Minimal reproduction / Recommended fixes) отдан пользователю в чате этой сессии, не сохранён отдельным файлом — история в этом самом диалоге и в коммитах ниже.
 
 ## Состояние
 
-- ✅ Local `ctx.memory` и `memory_search` ограничены workspace вызывающего Agent и записывают точные citations в `memory/search` до возврата модели.
-- ✅ TencentDB L1 search приведён к v3 контракту: `x-tdai-service-id`, Team/Agent/User identifiers, `data.items` и проверка business envelope.
-- ✅ Включённый TencentDB route без реальной конфигурации падает при загрузке; runtime stub удалён.
-- ✅ Добавлен opt-in overlay `integrations/tencentdb-agent-memory/memory.cordis.yml.example`.
-- ✅ Актуальный полный memory/tool-memory набор: 92 passed в 11 файлах; package TypeScript checks и `git diff --check` прошли. Изменённые runtime-файлы `index.ts`, `http-response.ts`, `openviking-http.ts` и `tencentdb-http.ts` проходят репозиторный per-file 100% coverage gate.
-- ✅ Opt-in L0 capture экспортирует completed/max-token turns после idle и записывает durable requested/succeeded/failed events; crash-window пока at least once.
-- ✅ Opt-in automatic L1 recall выполняется перед первым step, логирует точные citations и fail-open код ошибки, затем добавляет отдельный недоверенный reference context.
-- ✅ Standalone Gateway на loopback работает без отдельного bearer secret; DSH отправляет требуемый v3 parser несекретный marker, а non-loopback endpoint требует credentialRef.
-- ✅ `tencentdbRuntime` запускает закреплённый локальный MemoryCore через `ctx.subprocess`, ждёт health и гарантированно завершает дерево при unload/HMR.
-- ✅ Live standalone MemoryCore smoke подтвердил health, L0 capture/query и envelope endpoints L1 search, L2 list, L3 read на локальном SQLite; повторяемая команда — `pnpm smoke:tencentdb-memory`.
-- ✅ Live L1/L2 extraction завершилась через OpenAI-compatible providers: L1 создала searchable memory, L2 создала читаемый scenario; локальный `free-router` снимает прежнюю блокировку exhausted allowance.
-- ✅ L3 publication исправлена в pinned upstream checkout: tool calls работают в изолированном draft workspace, неуспешный runner отбрасывает draft, а live `persona.md` публикуется только после полного успеха и sanitization. Ошибки чтения profile, scene index и изменённых scene теперь отклоняют попытку и не продвигают checkpoint; path containment не принимает соседний каталог с тем же префиксом. 9 regression tests, plugin build и deterministic live AI-SDK smoke подтвердили, что write + три последующих 429 оставляют старый profile неизменным.
-- ✅ Explicit и automatic TencentDB recall поддерживают L1–L3: L2 идёт через bounded `scenario/ls` + query-matched `scenario/read`, L3 — через singleton `core/read`; слои делят общий hit/byte budget.
-- ✅ Real headless Loader/AgentLoop e2e доказывает, что `memory/search` записан, а недоверенный TencentDB snapshot фактически попадает в model request перед direct user prompt.
-- ✅ L0 capture соблюдает upstream bounds 100×8192 и проверяет полный acceptance result; delivery честно остаётся at least once, потому что pinned upstream не принимает idempotency key или client message ID.
-- ✅ TencentDB identity isolation больше не использует один deployment-wide tuple: `isolationBindings` точно отображает абсолютный DSH workspace и effective durable agent preset на заранее созданные Team/Agent/User identifiers. Duplicate scopes, reuse Team/Agent profile и unbound caller отвергаются до HTTP.
-- ✅ Recall outage policy зафиксирована как fail-open по слоям: успешные слои сохраняются, cancellation распространяется, а durable failure принимает только закрытый безопасный набор memory diagnostic codes.
-- ✅ Production-readiness review закрыл неограниченное буферизование HTTP body: TencentDB и OpenViking теперь читают поток только до `maxResponseBytes` и немедленно отменяют его при переполнении. `baseUrl` принимает только чистый HTTP(S) origin, а пустые credential refs и resolved secrets отклоняются.
-- ✅ Все durable memory events (`search`, capture requested/succeeded/failed, recall failed) добавлены в generated persistence vocabulary; логи с ними больше не отвергаются при resume.
-- ✅ Пользовательский гайд и integration README сверены с runtime-контрактом, исправлены и оформлены как полные EN/ZH пары; порты MemoryCore 8420 и отдельного DSH LLM proxy 8096 явно разведены.
-- ✅ Package README и все затронутые generated/hand-written документы оформлены как полные EN/ZH пары; полный `doc-sync` проходит 28/28 gate без исключений.
-- ✅ Generated config/tool/Cordis catalogs и capability/event graphs знают native memory и verifier seams; ссылки ведут на канонические subsystem/package страницы, а EN/ZH артефакты синхронизированы.
-- ✅ Финальная проверка из чистого commit worktree: 92/92 memory tests, 28 generator tests, root `pnpm typecheck`, полный production `pnpm run build`, `doc-sync` 28/28 и `git diff --check` проходят.
+Подтверждённые находки (из живых `session.jsonl.zstd`, `~/.dsh/settings.yaml`, `~/.dsh/.agent-presets/`, `~/.dsh/profiles/web/cordis.patch.yml`):
+
+- "9router" — не часть DSH; внешний npm-пакет (`decolua/9router`), локальный Next.js-гейтвей на `127.0.0.1:20128`, виден DSH только как обычный `llm-pi-ai` provider `nine-router` (models `dsh-agent` free-tier / `dsh-agent-paid`). Второй, более старый гейтвей `free-router` (self-written `free_router.py`, порт 8090) сосуществует и мигрируется на 9router в отдельном проекте `~/projects/free-router/`.
+- Модель как минимум один раз документированно **фабриковала** запуск сабагентов (описала в тексте, не вызвав инструмент) — самопризнание найдено в реальном session-логе (`session-da02b75c...`, turn 4).
+- Реально исполненные сабагенты (найдены и разобраны до отдельных child-session-логов) используют `provider: spawn`/`fork`, который **молча наследует текущую модель родителя** в момент старта — ни разу не был закреплён явно за `nine-router`. Наблюдались дети на `free-router` и на платном `OpenRouterDeepSeek` (после silent-выглядящей, но фактически явной смены модели родителя через `reason: "change"`).
+- Бывший default preset `standard-claude` (пользовательский, `~/.dsh/.agent-presets/standard-claude/`) жёстко направлял `subagent`-tool на `provider: claude-code` — реальный Claude Code CLI под Claude Pro OAuth, вообще не через 9router. Пользователь уже переключил `agent-presets.default` на `standard` в `~/.dsh/settings.yaml`.
+- Одна из живых сессий поймала реальный HTTP 422 (`extra_forbidden` на `assistant.reasoning`) при replay истории на `free-router` — root cause найден в исходниках `@earendil-works/pi-ai` (`openai-completions.js`: `assistantMsg[thinkingSignature] = ...` ставится безусловно). Наивный fix (резать native replay при смене provider) сломал бы существующий тест `convert.spec.ts` ("recombines... across target providers and models") — это осознанный контракт, не баг. Правильный fix — уже существующая конфигурационная опция `compat.requiresThinkingAsText`.
+- Сообщение `"Upstream error from Nvidia: Service temporarily overloaded"` не матчилось ни одним паттерном `classifyPiAiError` и падало в неретраящийся `PI_AI_ERROR` — реальный, узкий баг в репозитории, исправлен.
+- Провайдер `claude-code-primary` (видим в session-логах как provider ПЕРВИЧНОГО чата) не найден нигде в репозитории, ни в текущем, ни в `.bak`-снимках `settings.yaml` — вероятно внешний/приватный bridge вне `deepseek-harness`; связанная ошибка `"Claude Code failed: success"` не может быть исправлена в этом репозитории.
+
+Сделано (репозиторий, 4 коммита на `master`):
+
+- ✅ `packages/llm/llm-pi-ai/src/stream.ts` — `classifyPiAiError` распознаёт `/\boverloaded\b/i` как `SERVER` (ретраящийся); тест в `adapter.spec.ts`; typecheck+тесты пакета зелёные.
+- ✅ Agent Note `implemented/bug-fix/2026-09-13-unstatused-overload-message-classified-as-server.{md,zh.md,i18n.yaml}`.
+- ✅ `packages/subagent/tool-subagent/README.{md,zh.md}` — явно задокументирован силентный model-inheritance для `spawn`/`fork` в `agentOptions`.
+
+Сделано (локально, `~/.dsh/`, НЕ git — вне репозитория):
+
+- ✅ Новый preset `~/.dsh/.agent-presets/standard-free/` — копия `standard` с `subagent` явно закреплённым за `nine-router`/`dsh-agent` через `agentOptions`, плюс `compaction-basic.modelPolicies` для раннего компакта на маленьком 131072-токенном контексте (найден и объяснён deadlock: `/compact` сам падает с `CONTEXT_WINDOW_EXCEEDED`, когда уже переполнено). **Не активирован как default** — ждёт решения пользователя (`agent-presets.default: standard-free` в `settings.yaml`).
+- ✅ `~/.dsh/profiles/web/cordis.patch.yml` — убран stale `default: standard-claude`, синхронизирован с `standard`.
+- ✅ `~/.dsh/settings.yaml`: `nine-router.retryPolicy.maxRetries` 1→3; `compat.requiresThinkingAsText: true` на `free-router` и `nine-router` (закрывает найденный HTTP 422 без единой строки кода в репозитории).
 
 ## Следующий шаг
 
-Интеграция в этом репозитории завершена и готова к публикации. Отслеживать upstream PR [TencentCloud/TencentDB-Agent-Memory#1355](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1355). После принятия заменить локальный runtime pin на merged upstream SHA; до этого использовать проверенный fork commit `5782862789c1a91b3dcd9c52394a43df632f0525`.
-
-## Граница модели
-
-- Sol `medium` оказался достаточен для live smoke, документации и локальных исправлений с уже определённым контрактом.
-- Sol `high` закрыл identity mapping, fail-open policy и consistency implementation.
-- Усиленный финальный проход закрыл production-readiness review; незавершённых задач, требующих следующего уровня модели, в текущем scope нет.
+Спросить пользователя, активировать ли `standard-free` как default preset (реально закрепляет сабагентов за 9router вместо silent-наследования). Иначе — сессия закрыта; форензик-находки и фиксы выше самодостаточны.
 
 ## Открытые вопросы
 
-- Для exactly-once capture нужен upstream `Idempotency-Key` или client message ID с атомарной уникальностью; deterministic key DSH должен включать session UUID, turn и digest canonical payload.
-- Upstream L3 patch опубликован commit `5782862789c1a91b3dcd9c52394a43df632f0525` на ветке `Artemedi:fix/persona-atomic-publication` и открыт как PR #1355. Aggregate `npm run build` в базовой ветке остаётся сломанным из-за ссылки на отсутствующий `scripts/seed-v2/tsconfig.json`; затронутый `build:plugin` проходит.
+- `claude-code-primary` (primary-chat provider, видим только в исторических session-логах) не идентифицирован — не в текущем `settings.yaml`, не в `.bak`-снимках, не в репозитории. Если пользователь снова столкнётся с `"Claude Code failed: success"`, источник нужно искать вне `deepseek-harness`.
+- Заявленный `contextWindow: 131072` для `nine-router/dsh-agent` не верифицирован против реального лимита бэкенда — снижен риск через compaction threshold, но не подтверждена точная цифра.
 
 ## Грабли
 
-- Рабочее дерево уже содержит много чужих untracked файлов, включая каталог `integrations/`; не удалять и не добавлять их массово.
-- `pnpm exec` пытается восстановить неполный workspace и выходит в сеть; локальные Vitest/TypeScript запускать через установленные JS entrypoints.
-- `tsx` требует IPC вне managed sandbox для генераторов.
+- Рабочее дерево содержит ~230 untracked `packages/*/*/package.json)` файлов (обрезанные, с хвостовой скобкой в имени) — debris от прерванного `pnpm install`, не трогать, не `git add`. Задокументировано в [sandbox.md](knowledge/sandbox.md).
+- `node`/`pnpm exec` недоступны в PATH по умолчанию в этой сессии — грузить через `export PATH="/home/Trintos/.local/share/fnm:$PATH" && eval "$(fnm env --shell bash)"` в каждом новом bash-вызове (включая тот, что делает `git commit`, иначе pre-commit lint-хук падает с `node: не найден`). Запускать тесты через `npx vitest run <path>` из корня репо, не `pnpm --filter <pkg> exec vitest` (workspace-проекты `thread-safe`/`process-bound` резолвятся неверно при filtered exec).
 - `bwrap` недоступен (`spawn bwrap ENOENT`).
 
 ## Память
