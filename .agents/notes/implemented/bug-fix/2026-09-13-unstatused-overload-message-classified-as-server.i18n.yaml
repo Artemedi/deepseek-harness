@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-13-unstatused-overload-message-classified-as-server.md
+2026-09-13-unstatused-overload-message-classified-as-server.md: 2af0e298b93281a59155ae2eb656cc48eb38303f
+2026-09-13-unstatused-overload-message-classified-as-server.zh.md: 9a78e09f1f6ea23917e8001fbd27b8128b50e937
