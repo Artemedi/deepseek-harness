@@ -31,7 +31,7 @@ Forensic-анализ интеграции внешнего локального
 ## Следующий шаг
 
 - ✅ `standard-free` активирован как default preset (`~/.dsh/settings.yaml: agent-presets.default: standard-free`) — подтверждено пользователем.
-- Ждём решения пользователя по `@local/dsh-claude-primary-agent` (см. "Состояние" выше): оставить как есть (осознанный "maximum delivery" режим через `claude`/`standard-claude` presets), поправить сообщение об ошибке в `driver.ts:30`, или откатить установку через задокументированный в его же `AUDIT.md` rollback (`package.json.before-claude-primary-2026-09-08` + `cordis.patch.yml.before-claude-primary-2026-09-08`, `pnpm install`, restart `dsh-web.service`).
+- `@local/dsh-claude-primary-agent` (см. "Состояние" выше) — пользователь решил: отложить разбор, пока используется только `standard`/`standard-free` (не `claude`/`standard-claude`, единственные два preset-id, которые этот плагин перехватывает), риска сейчас нет. Ничего не менять в нём без отдельного запроса; при возврате к теме см. rollback в его собственном `AUDIT.md`.
 
 ## Открытые вопросы
 
