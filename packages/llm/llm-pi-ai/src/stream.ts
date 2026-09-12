@@ -54,6 +54,12 @@ function classifyPiAiError(message: string): string {
   // It contains no permanent rejection fact, so recover it as a transient
   // server failure rather than bypassing the provider's retry policy.
   if (/^upstream error\.?$/i.test(message)) return 'SERVER'
+  // A gateway-flattened capacity failure with no numeric status of its own
+  // (observed verbatim: "Upstream error from Nvidia: Service temporarily
+  // overloaded"). Transient by construction — an overloaded backend recovers
+  // on its own — so this must reach the provider's retry policy rather than
+  // fall through to the unclassified default below.
+  if (/\boverloaded\b/i.test(message)) return 'SERVER'
   if (/\b5\d\d\b/.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider

@@ -382,6 +382,20 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/chat/completions'])
   })
 
+  it('classifies an unstatused upstream overload message as a retryable server failure', async () => {
+    const server = await mockServer([{
+      status: 503,
+      body: JSON.stringify({ error: { message: 'Upstream error from Nvidia: Service temporarily overloaded' } }),
+    }])
+    const ctx = await harness(server.url)
+    const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: { message: expect.stringContaining('overloaded'), code: 'SERVER' },
+    })
+    expect(server.paths).toEqual(['/chat/completions'])
+  })
+
   it('uses the resolved catalog context window for usage-based overflow detection', async () => {
     const model = getBuiltinModels('deepseek').find(candidate => candidate.id === 'deepseek-v4-flash')
     if (model === undefined) throw new Error('deepseek-v4-flash missing from pi-ai test catalog')
