@@ -26,11 +26,13 @@
 - ✅ Production-readiness review закрыл неограниченное буферизование HTTP body: TencentDB и OpenViking теперь читают поток только до `maxResponseBytes` и немедленно отменяют его при переполнении. `baseUrl` принимает только чистый HTTP(S) origin, а пустые credential refs и resolved secrets отклоняются.
 - ✅ Все durable memory events (`search`, capture requested/succeeded/failed, recall failed) добавлены в generated persistence vocabulary; логи с ними больше не отвергаются при resume.
 - ✅ Пользовательский гайд и integration README сверены с runtime-контрактом, исправлены и оформлены как полные EN/ZH пары; порты MemoryCore 8420 и отдельного DSH LLM proxy 8096 явно разведены.
-- ✅ Package README теперь также оформлен как полная EN/ZH пара; пять затронутых пар, включая generated config catalog, синхронизированы и проходят scoped translation-pairing check.
+- ✅ Package README и все затронутые generated/hand-written документы оформлены как полные EN/ZH пары; полный `doc-sync` проходит 28/28 gate без исключений.
+- ✅ Generated config/tool/Cordis catalogs и capability/event graphs знают native memory и verifier seams; ссылки ведут на канонические subsystem/package страницы, а EN/ZH артефакты синхронизированы.
+- ✅ Финальная проверка из чистого commit worktree: 92/92 memory tests, 28 generator tests, root `pnpm typecheck`, полный production `pnpm run build`, `doc-sync` 28/28 и `git diff --check` проходят.
 
 ## Следующий шаг
 
-Отслеживать upstream PR [TencentCloud/TencentDB-Agent-Memory#1355](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1355). После принятия заменить локальный runtime pin на merged upstream SHA; до этого использовать проверенный fork commit `5782862789c1a91b3dcd9c52394a43df632f0525`.
+Интеграция в этом репозитории завершена и готова к публикации. Отслеживать upstream PR [TencentCloud/TencentDB-Agent-Memory#1355](https://github.com/TencentCloud/TencentDB-Agent-Memory/pull/1355). После принятия заменить локальный runtime pin на merged upstream SHA; до этого использовать проверенный fork commit `5782862789c1a91b3dcd9c52394a43df632f0525`.
 
 ## Граница модели
 
@@ -49,25 +51,6 @@
 - `pnpm exec` пытается восстановить неполный workspace и выходит в сеть; локальные Vitest/TypeScript запускать через установленные JS entrypoints.
 - `tsx` требует IPC вне managed sandbox для генераторов.
 - `bwrap` недоступен (`spawn bwrap ENOENT`).
-
-## Known debt (pre-existing, not introduced here)
-
-1. `structure: analysis/ — unknown lifecycle folder` — `.agents/notes/analysis/`
-   не входит в closed set `proposed/implemented/rejected/archived`.
-2. `2026-08-26-three-project-integration-plan.md` missing `## Acceptance criteria`
-   and `## Risks` (required for `proposed/` skeleton).
-3. `verify-translation-pairing.ts` падает на Node 22.11 (`options.exclude`
-   API change) — corpus-wide, но `--write <file>` работает.
-4. `2026-09-05-standard-claude-subagent-oauth.md` не соответствует обязательному
-   Agent Note header/status/section format; изменение не относится к memory integration.
-5. `verify-export-jsdoc` падает на постороннем незавершённом
-   `packages/experimental/cross-review/src/index.ts`: exported `DECISIONS` без JSDoc.
-6. Полная генерация config catalog видит посторонние untracked cross-review/verifier
-   packages; текущий catalog diff намеренно оставляет только синхронную EN/ZH
-   миграцию TencentDB `isolationBindings`.
-7. Корневой `pnpm typecheck` в текущем грязном worktree видит незавершённый untracked
-   `packages/experimental/cross-review`; memory/tool-memory TypeScript build проходит,
-   а общий gate нужно подтверждать из чистого commit worktree.
 
 ## Память
 

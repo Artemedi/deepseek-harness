@@ -15,6 +15,8 @@ Keep `standard-claude` available and ship the `claude` preset under `apps/cli/co
 The `subagent-claude-code` provider constructs the child environment from the scrubbed parent environment and the explicit request environment:
 
 ```ts
+const scrubbedParentEnv = (): Record<string, string> => ({ PATH: '/usr/bin' })
+const spec: { env?: Record<string, string> } = {}
 const childEnvironment = { ...scrubbedParentEnv(), ...spec.env }
 ```
 

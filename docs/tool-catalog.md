@@ -1294,7 +1294,7 @@ Search prior workspace session history for explicit, cited memory. Results are r
     },
     "depth": {
       "type": "string",
-      "description": "Required for openviking: L0, L1, or L2."
+      "description": "Memory layer: OpenViking requires L0-L2; TencentDB accepts L1-L3."
     }
   },
   "required": [

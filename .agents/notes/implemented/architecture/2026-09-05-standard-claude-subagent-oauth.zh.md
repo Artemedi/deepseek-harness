@@ -15,6 +15,8 @@ Status: implemented
 `subagent-claude-code` provider 使用经过清理的父环境和显式请求环境构造子环境：
 
 ```ts
+const scrubbedParentEnv = (): Record<string, string> => ({ PATH: '/usr/bin' })
+const spec: { env?: Record<string, string> } = {}
 const childEnvironment = { ...scrubbedParentEnv(), ...spec.env }
 ```
 

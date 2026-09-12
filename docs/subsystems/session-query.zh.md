@@ -364,6 +364,57 @@ type SessionQueryErrorCode =
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxmemory--memoryservice"></a>
+
+### `ctx.memory` — `MemoryService`
+
+Explicit local-memory service over the existing session-query corpus.
+
+```ts cordis-catalog
+/**
+ * Resolve and validate one explicit memory search before provider execution.
+ * @param agent - exact live caller whose session supplies the workspace scope.
+ * @param request - query, bounds, provider route, and cancellation.
+ * @returns immutable provider execution specification.
+ */
+resolve(agent: Agent, request: MemorySearchRequest): ResolvedMemorySearchSpec
+
+/**
+ * Search same-workspace history using a resolved provider specification.
+ * @param agent - exact live caller whose session supplies the workspace scope.
+ * @param request - query, bounds, provider route, and cancellation.
+ * @returns detached citations that a consumer must log before model use.
+ */
+async search(agent: Agent, request: MemorySearchRequest): Promise<MemorySearchResult>
+
+/**
+ * Persist one completed conversation slice through an explicitly enabled provider.
+ * @param agent - exact live Agent whose session and workspace own the slice.
+ * @param request - bounded messages, provider selection, and cancellation.
+ */
+async capture(agent: Agent, request: MemoryCaptureRequest): Promise<void>
+
+/**
+ * Export every completed, not-yet-successful turn in chronological order.
+ * @param agent - exact live agent whose completed turns are captured.
+ * @param signal - cancellation for the maintenance pass and provider calls.
+ */
+async captureCompletedTurns(agent: Agent, signal: AbortSignal): Promise<void>
+
+/**
+ * Return logged, explicitly untrusted TencentDB context for one proposed first step.
+ * @param agent - exact live agent receiving recalled context.
+ * @param messages - proposed first-step messages used to derive the direct-user query.
+ * @param signal - cancellation shared with the active agent turn.
+ * @returns a separate reference message, or `undefined` when recall has no usable result.
+ */
+async recallForStep(agent: Agent, messages: readonly UserMessage[], signal: AbortSignal): Promise<UserMessage | undefined>
+```
+
+Types: [Agent](core.zh.md) · [UserMessage](session.zh.md)
+
+Source: [`packages/experimental/memory/src/index.ts`](../../packages/experimental/memory/src/index.ts)
+
 <a id="ctxsessionquery--sessionqueryengine-abstract-seam"></a>
 
 ### `ctx.sessionQuery` — `SessionQueryEngine` (abstract seam)

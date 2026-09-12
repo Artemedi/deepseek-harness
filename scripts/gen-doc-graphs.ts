@@ -249,6 +249,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'The interface supplies exact reads, filters, and traces; its concrete backend adds full-text reconciliation, ranking, snippets, and cursor generations, while the model consumer owns workspace authority and cursor-free rendering.',
   },
   {
+    key: 'memory',
+    pkg: 'experimental-memory',
+    title: 'Opt-in external memory seam',
+    mode: 'seam',
+    consumers: ['experimental-tool-memory'],
+    note: 'Resolves caller-owned workspace and preset scope, records bounded recall and capture lifecycle events, and keeps remote provider content behind the durable Session log.',
+  },
+  {
     key: 'fileReferences',
     pkg: 'file-reference',
     title: 'File reference discovery',
@@ -286,6 +294,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'core',
     consumers: ['agent-loop', 'tool-ask-user', 'tool-bash', 'tool-cordis', 'tool-fs', 'tool-terminal', 'tool-skill', 'tool-subagent', 'tool-todo', 'tool-web'],
     note: 'Registers capabilities, owns Code Mode transport, and routes calls through pre-policy, monotonic guards, around dispatch, post-policy, and final-result observation.',
+  },
+  {
+    key: 'verifier',
+    pkg: 'experimental-verifier',
+    title: 'Opt-in pairwise verifier seam',
+    mode: 'seam',
+    consumers: ['experimental-tool-verifier'],
+    note: 'Runs one bounded JSON-schema comparison through the configured provider; the explicit tool remains a probabilistic aid rather than a correctness authority.',
   },
   {
     key: 'userQuestions',

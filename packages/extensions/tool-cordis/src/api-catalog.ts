@@ -1053,6 +1053,41 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'memory',
+    summary: 'Explicit local-memory service over the existing session-query corpus.',
+    description: 'Explicit local-memory service over the existing session-query corpus.',
+    methods: [
+      {
+        signature: 'resolve(agent: Agent, request: MemorySearchRequest): ResolvedMemorySearchSpec',
+        description: 'Resolve and validate one explicit memory search before provider execution.',
+        parameters: [{ name: 'agent', description: 'exact live caller whose session supplies the workspace scope.' }, { name: 'request', description: 'query, bounds, provider route, and cancellation.' }],
+        returns: 'immutable provider execution specification.',
+      },
+      {
+        signature: 'async search(agent: Agent, request: MemorySearchRequest): Promise<MemorySearchResult>',
+        description: 'Search same-workspace history using a resolved provider specification.',
+        parameters: [{ name: 'agent', description: 'exact live caller whose session supplies the workspace scope.' }, { name: 'request', description: 'query, bounds, provider route, and cancellation.' }],
+        returns: 'detached citations that a consumer must log before model use.',
+      },
+      {
+        signature: 'async capture(agent: Agent, request: MemoryCaptureRequest): Promise<void>',
+        description: 'Persist one completed conversation slice through an explicitly enabled provider.',
+        parameters: [{ name: 'agent', description: 'exact live Agent whose session and workspace own the slice.' }, { name: 'request', description: 'bounded messages, provider selection, and cancellation.' }],
+      },
+      {
+        signature: 'async captureCompletedTurns(agent: Agent, signal: AbortSignal): Promise<void>',
+        description: 'Export every completed, not-yet-successful turn in chronological order.',
+        parameters: [{ name: 'agent', description: 'exact live agent whose completed turns are captured.' }, { name: 'signal', description: 'cancellation for the maintenance pass and provider calls.' }],
+      },
+      {
+        signature: 'async recallForStep(agent: Agent, messages: readonly UserMessage[], signal: AbortSignal): Promise<UserMessage | undefined>',
+        description: 'Return logged, explicitly untrusted TencentDB context for one proposed first step.',
+        parameters: [{ name: 'agent', description: 'exact live agent receiving recalled context.' }, { name: 'messages', description: 'proposed first-step messages used to derive the direct-user query.' }, { name: 'signal', description: 'cancellation shared with the active agent turn.' }],
+        returns: 'a separate reference message, or `undefined` when recall has no usable result.',
+      },
+    ],
+  },
+  {
     key: 'messageFeedback',
     summary: 'Storage-domain sidecar service.',
     description: 'Storage-domain sidecar service. It inspects persisted Session history and never creates or resumes an Agent or Session.',
@@ -1870,6 +1905,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Abstract subprocess service. Subclass, implement spawn, and load the subclass as a plugin — it registers as `ctx.subprocess` (one implementation per context; loading a second throws, which is cordis\' standard duplicate-service behavior).\n\nImplementations must honor these semantics:\n\n- Executable paths belong to one execution world shared with the mounted filesystem provider.\n- spawn returns immediately with a live handle; `done` resolves at process close with exit facts and rejects only for spawn-level failures.\n- Collect-mode readers are offset-based and non-consuming, so independent readers never consume one another\'s output; lossy reads report truncation and the spill file holding the complete stream when one exists. Piped streams are handed to the caller raw and never buffered here.\n- SubprocessHandle.terminate (and the spec\'s abort signal) escalates SIGTERM→grace→SIGKILL — the only termination verb — tree-scoped on every platform. SubprocessHandle.waitForExit observes whole-tree liveness, so a consumer-owned teardown ladder can hold each tier on real quiescence.\n- Disposal of the service terminates all still-running managed processes and awaits their exit.\n- spawnTerminal owns terminal allocation, text transport, foreground groups, signalling, and whole-session quiescence behind one awaited termination method; readiness and persistent-shell policy stay in the PTY consumer. Its output stream ends after queued terminal output when the top-level process exits.',
     methods: [
       {
+        signature: 'readonly executionWorld: \'unspecified\' | \'local-host\' | \'remote\' = \'unspecified\'',
+        description: 'Execution-world classification for consumers that must remain on the DSH host.',
+        parameters: [],
+      },
+      {
         signature: 'abstract resolveExecutable( command: string, env?: Readonly<Record<string, string>>, signal?: AbortSignal, ): Promise<string>',
         description: 'Resolve one configured executable in this provider\'s execution world. Absolute paths are verified; bare names use the provider\'s scrubbed PATH plus explicit environment overrides. Relative paths containing separators are rejected: the resolution base is undefined, so providers fail loud instead of guessing.',
         parameters: [{ name: 'command', description: 'absolute executable path or bare PATH name.' }, { name: 'env', description: 'explicit environment entries used for lookup.' }, { name: 'signal', description: 'aborts remote or local lookup.' }],
@@ -2216,6 +2256,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
         returns: 'The answer chosen or typed by the human.',
         throws: ['{UserQuestionError} code `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
+      },
+    ],
+  },
+  {
+    key: 'verifier',
+    summary: 'One opt-in explicit verifier provider.',
+    description: 'One opt-in explicit verifier provider.',
+    methods: [
+      {
+        signature: 'async compare(request: VerifierCompareRequest): Promise<VerifierCompareResult>',
+        description: 'Compare two bounded evidence records through the configured JSON-only provider.',
+        parameters: [{ name: 'request', description: 'Pairwise evidence and cancellation signal.' }],
+        returns: 'The validated provider preference.',
       },
     ],
   },
@@ -3694,6 +3747,46 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
   },
   {
+    name: 'MemoryCaptureMessage',
+    declaration: 'export interface MemoryCaptureMessage {\n    readonly role: \'user\' | \'assistant\';\n    readonly content: string;\n}',
+  },
+  {
+    name: 'MemoryCaptureRequest',
+    declaration: 'export interface MemoryCaptureRequest {\n    readonly messages: readonly MemoryCaptureMessage[];\n    readonly provider?: \'tencentdb\';\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'MemoryDepth',
+    declaration: 'export type MemoryDepth = \'L0\' | \'L1\' | \'L2\' | \'L3\';',
+  },
+  {
+    name: 'MemoryHit',
+    declaration: 'export interface MemoryHit {\n    readonly id: MemoryId;\n    readonly sessionId?: SessionId;\n    readonly seq?: number;\n    readonly eventType?: string;\n    readonly kind?: \'memory\' | \'skill\' | \'wiki\' | \'code-graph\' | \'resource\';\n    readonly title?: string;\n    readonly source?: string;\n    readonly content: string;\n}',
+  },
+  {
+    name: 'MemoryId',
+    declaration: 'export type MemoryId = Branded<\'MemoryId\'>;',
+  },
+  {
+    name: 'MemoryProvider',
+    declaration: 'export interface MemoryProvider {\n    readonly id: string;\n    search(request: MemoryProviderSearchRequest): Promise<readonly MemoryHit[]>;\n    capture?(request: MemoryProviderCaptureRequest): Promise<void>;\n}',
+  },
+  {
+    name: 'MemoryProviderCaptureRequest',
+    declaration: 'export interface MemoryProviderCaptureRequest extends MemoryCaptureRequest {\n    readonly sessionId: SessionId;\n    readonly workspace: string;\n    readonly agentPreset?: string;\n}',
+  },
+  {
+    name: 'MemoryProviderSearchRequest',
+    declaration: 'export interface MemoryProviderSearchRequest {\n    readonly workspace: string;\n    readonly agentPreset?: string;\n    readonly query: string;\n    readonly limit: number;\n    readonly maxContentBytes: number;\n    readonly depth?: MemoryDepth;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'MemorySearchRequest',
+    declaration: 'export interface MemorySearchRequest {\n    readonly query: string;\n    readonly limit?: number;\n    readonly maxContentBytes?: number;\n    readonly provider?: \'local\' | \'tencentdb\' | \'openviking\';\n    readonly depth?: MemoryDepth;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'MemorySearchResult',
+    declaration: 'export interface MemorySearchResult {\n    readonly provider: string;\n    readonly workspace: string;\n    readonly hits: readonly MemoryHit[];\n}',
+  },
+  {
     name: 'Message',
     declaration: 'export interface Message {\n    readonly id: MessageId;\n    readonly role: \'system\' | \'user\' | \'assistant\';\n    readonly content: ContentBlock[];\n    readonly source: MessageSource;\n}',
   },
@@ -3944,6 +4037,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResolvedCredential',
     declaration: 'export interface ResolvedCredential {\n    value: string;\n    source: string;\n}',
+  },
+  {
+    name: 'ResolvedMemorySearchSpec',
+    declaration: 'export interface ResolvedMemorySearchSpec {\n    readonly provider: MemoryProvider;\n    readonly workspace: string;\n    readonly query: string;\n    readonly limit: number;\n    readonly maxContentBytes: number;\n    readonly depth?: MemoryDepth;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'ResolvedNormalRetryPolicy',
@@ -4936,6 +5033,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UserQuestionProvider',
     declaration: 'export interface UserQuestionProvider {\n    ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>;\n}',
+  },
+  {
+    name: 'VerifierCandidate',
+    declaration: 'export interface VerifierCandidate {\n    readonly id: string;\n    readonly evidence: string;\n}',
+  },
+  {
+    name: 'VerifierCompareRequest',
+    declaration: 'export interface VerifierCompareRequest {\n    readonly rubric: string;\n    readonly left: VerifierCandidate;\n    readonly right: VerifierCandidate;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'VerifierCompareResult',
+    declaration: 'export interface VerifierCompareResult {\n    readonly schemaVersion: \'score-v1\';\n    readonly probabilityLeft: number;\n    readonly rationale: string;\n}',
   },
   {
     name: 'WebBootEntry',

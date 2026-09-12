@@ -741,6 +741,34 @@ export interface Config {
 
 Source: [`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
 
+<a id="deepseek-aidsh-experimental-verifier"></a>
+
+## `@deepseek-ai/dsh-experimental-verifier`
+
+Requires: `credentials`
+
+```ts config-catalog
+/** Loader configuration for the Mistral-first verifier provider. */
+export interface Config {
+  /** OpenAI-compatible endpoint, with or without a trailing `/v1`. */
+  baseUrl?: string
+  /** Model pinned for comparison. */
+  model?: string
+  /** Credential reference resolved through `ctx.credentials` for every request. */
+  apiKeyEnv?: string
+  /** Fixed output budget for equal-budget comparisons. */
+  maxTokens?: number
+  /** Per-request network deadline. */
+  timeoutMs?: number
+  /** Maximum evidence bytes accepted for each candidate. */
+  maxEvidenceBytes?: number
+  /** Maximum UTF-8 rationale bytes retained in the result. */
+  maxRationaleBytes?: number
+}
+```
+
+Source: [`packages/experimental/verifier/src/index.ts:22`](../packages/experimental/verifier/src/index.ts)
+
 <a id="deepseek-aidsh-file-reference-local"></a>
 
 ## `@deepseek-ai/dsh-file-reference-local`
@@ -3374,6 +3402,8 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-commands` ([`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts))
 - `@deepseek-ai/dsh-cordis-client-runner` ([`packages/extensions/cordis-client-runner/src/index.ts`](../packages/extensions/cordis-client-runner/src/index.ts))
 - `@deepseek-ai/dsh-experimental-tool-memory` — requires `memory` · `tools` ([`packages/experimental/tool-memory/src/index.ts`](../packages/experimental/tool-memory/src/index.ts))
+- `@deepseek-ai/dsh-experimental-tool-verifier` — requires `tools` · `verifier` ([`packages/experimental/tool-verifier/src/index.ts`](../packages/experimental/tool-verifier/src/index.ts))
+- `@deepseek-ai/dsh-experimental-verifier-bundle` ([`packages/bundle/experimental-verifier/src/index.ts`](../packages/bundle/experimental-verifier/src/index.ts))
 - `@deepseek-ai/dsh-fs-e2b` — requires `e2b` ([`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts))
 - `@deepseek-ai/dsh-fs-observation-policy` ([`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts))
 - `@deepseek-ai/dsh-goal-round-driver` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts))
