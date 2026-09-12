@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import TencentDbHttpProvider from '../src/tencentdb-http.ts'
 
+const binding = {
+  workspace: '/workspace/a', agentPreset: 'standard',
+  teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+}
 const request = (signal = new AbortController().signal) => ({
-  workspace: '/workspace/a', query: 'retry', limit: 2, maxContentBytes: 100, signal,
+  workspace: binding.workspace, agentPreset: binding.agentPreset,
+  query: 'retry', limit: 2, maxContentBytes: 100, signal,
 })
+const captureScope = { workspace: binding.workspace, agentPreset: binding.agentPreset }
 
 const response = (items: unknown, code = 0) => new Response(JSON.stringify({ code, message: code === 0 ? 'ok' : 'failed', request_id: 'request-1', data: { items } }), {
   status: 200, headers: { 'content-type': 'application/json' },
@@ -12,14 +19,14 @@ const response = (items: unknown, code = 0) => new Response(JSON.stringify({ cod
 function provider(resolveCredential: (ref: string) => Promise<string | undefined> = async ref => ref === 'TENCENT_KEY' ? 'secret-value' : undefined) {
   return new TencentDbHttpProvider({
     baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-    teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+    isolationBindings: [binding],
   }, resolveCredential)
 }
 
 function anonymousProvider(baseUrl = 'http://127.0.0.1:8420', resolveCredential = vi.fn(async () => undefined)) {
   return {
     provider: new TencentDbHttpProvider({
-      baseUrl, serviceId: 'memory-1', teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      baseUrl, serviceId: 'memory-1', isolationBindings: [binding],
     }, resolveCredential),
     resolveCredential,
   }
@@ -48,6 +55,80 @@ describe('TencentDbHttpProvider', () => {
     }])
   })
 
+  it('selects only the exact workspace and agent-preset binding before any HTTP request', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        team_id: 'team-2', agent_id: 'agent-2', user_id: 'user-2',
+      })
+      return response([])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const scoped = new TencentDbHttpProvider({
+      baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+      isolationBindings: [binding, {
+        workspace: '/workspace/b', agentPreset: 'minimal',
+        teamId: 'team-2', agentId: 'agent-2', userId: 'user-2',
+      }],
+    }, async () => 'secret')
+
+    await expect(scoped.search({ ...request(), workspace: '/workspace/b', agentPreset: 'minimal' }))
+      .resolves.toEqual([])
+    await expect(scoped.search({ ...request(), workspace: '/workspace/b', agentPreset: 'standard' }))
+      .rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
+    await expect(scoped.search({ ...request(), workspace: '/workspace/unbound' }))
+      .rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    vi.stubGlobal('fetch', vi.fn(async () => response([])))
+    const unpreset = new TencentDbHttpProvider({
+      baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+      isolationBindings: [{
+        workspace: binding.workspace, teamId: binding.teamId, agentId: binding.agentId, userId: binding.userId,
+      }],
+    }, async () => 'secret')
+    await expect(unpreset.search({
+      workspace: binding.workspace, query: 'retry', limit: 2, maxContentBytes: 100,
+      signal: new AbortController().signal,
+    })).resolves.toEqual([])
+  })
+
+  it('rejects ambiguous or incomplete isolation bindings during construction', () => {
+    const config = {
+      baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings: [binding],
+    }
+    expect(() => new TencentDbHttpProvider({ ...config, isolationBindings: [] }, async () => undefined))
+      .toThrow('isolationBindings must not be empty')
+    expect(() => new TencentDbHttpProvider({
+      ...config, isolationBindings: [{ ...binding, workspace: 'relative/path' }],
+    }, async () => undefined)).toThrow('workspace must be absolute')
+    expect(() => new TencentDbHttpProvider({
+      ...config, isolationBindings: [binding, { ...binding }],
+    }, async () => undefined)).toThrow('duplicates a DSH workspace and agent preset')
+    expect(() => new TencentDbHttpProvider({
+      ...config,
+      isolationBindings: [binding, { ...binding, workspace: '/workspace/../workspace/a', agentPreset: ' standard ' }],
+    }, async () => undefined)).toThrow('duplicates a DSH workspace and agent preset')
+    expect(() => new TencentDbHttpProvider({
+      ...config,
+      isolationBindings: [binding, { ...binding, workspace: '/workspace/b', agentPreset: 'minimal' }],
+    }, async () => undefined)).toThrow('reuses a Team/Agent profile')
+    expect(() => new TencentDbHttpProvider({ ...config, serviceId: ' ' }, async () => undefined))
+      .toThrow('serviceId must not be empty')
+    expect(() => new TencentDbHttpProvider({
+      ...config, isolationBindings: [{ ...binding, agentPreset: ' ' }],
+    }, async () => undefined)).toThrow('agentPreset must not be empty')
+    expect(() => new TencentDbHttpProvider({
+      ...config, isolationBindings: [{ ...binding, teamId: ' ' }],
+    }, async () => undefined)).toThrow('identifiers must not be empty')
+    expect(() => new TencentDbHttpProvider({
+      ...config, isolationBindings: null as unknown as typeof config.isolationBindings,
+    }, async () => undefined)).toThrow('isolationBindings must not be empty')
+    expect(() => new TencentDbHttpProvider({ ...config, timeoutMs: 0 }, async () => undefined))
+      .toThrow('timeoutMs must be a positive integer')
+    expect(() => new TencentDbHttpProvider({ ...config, maxResponseBytes: 16_777_217 }, async () => undefined))
+      .toThrow('maxResponseBytes must be a positive integer')
+  })
+
   it('retrieves only query-matched L2 scenarios through bounded list and read calls', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(String(input)).pathname
@@ -73,6 +154,46 @@ describe('TencentDbHttpProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('handles null and untitled L2 profiles and rejects malformed scenario data', async () => {
+    const reads: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname
+      const body = JSON.parse(String(init?.body)) as { path?: string }
+      if (path === '/v3/scenario/ls') {
+        return new Response(JSON.stringify({ code: 0, data: { entries: [
+          { path: '', summary: 'retry' },
+          { path: 'retry/' },
+          { path: 'retry-a.md' },
+          { path: 'retry-b.md' },
+        ] } }), { status: 200 })
+      }
+      reads.push(body.path ?? '')
+      return new Response(JSON.stringify({
+        code: 0, data: { content: body.path === 'retry-a.md' ? null : 'fallback title' },
+      }), { status: 200 })
+    }))
+    await expect(provider().search({ ...request(), depth: 'L2' })).resolves.toEqual([{
+      id: 'tencentdb:scenario:retry-b.md', kind: 'memory', title: 'retry-b.md',
+      content: 'fallback title', source: 'tencentdb:scenario:retry-b.md',
+    }])
+    expect(reads).toEqual(['retry-a.md', 'retry-b.md'])
+
+    for (const entries of [undefined, [null], [{ path: 42 }]]) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 0, data: { entries } }), { status: 200 })))
+      await expect(provider().search({ ...request(), depth: 'L2' }))
+        .rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify({
+      code: 0,
+      data: String(input).endsWith('/v3/scenario/ls')
+        ? { entries: [{ path: 'retry.md', summary: 'retry' }] }
+        : { content: 42 },
+    }), { status: 200 })))
+    await expect(provider().search({ ...request(), depth: 'L2' }))
+      .rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+  })
+
   it('applies one timeout to the complete multi-request L2 search', async () => {
     vi.useFakeTimers()
     let reads = 0
@@ -92,7 +213,7 @@ describe('TencentDbHttpProvider', () => {
     }))
     const timed = new TencentDbHttpProvider({
       baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1', timeoutMs: 30,
+      isolationBindings: [binding], timeoutMs: 30,
     }, async () => 'secret')
     const pending = timed.search({ ...request(), depth: 'L2' })
     const rejected = expect(pending).rejects.toMatchObject({ code: 'MEMORY_RETRYABLE' })
@@ -112,6 +233,11 @@ describe('TencentDbHttpProvider', () => {
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 0, data: { content: null } }), { status: 200 })))
     await expect(provider().search({ ...request(), depth: 'L3' })).resolves.toEqual([])
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 0, data: { content: 42 } }), { status: 200 })))
+    await expect(provider().search({ ...request(), depth: 'L3' })).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 0, data: null }), { status: 200 })))
+    await expect(provider().search({ ...request(), depth: 'L3' })).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
   })
 
   it('uses the non-secret protocol bearer required by an unprotected loopback Gateway', async () => {
@@ -130,7 +256,7 @@ describe('TencentDbHttpProvider', () => {
 
     await expect(local.provider.search(request())).resolves.toEqual([])
     await expect(local.provider.capture({
-      sessionId: 'session-1', messages: [{ role: 'user', content: 'hello' }], signal: new AbortController().signal,
+      ...captureScope, sessionId: SessionId('session-1'), messages: [{ role: 'user', content: 'hello' }], signal: new AbortController().signal,
     })).resolves.toBeUndefined()
     expect(local.resolveCredential).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -153,22 +279,43 @@ describe('TencentDbHttpProvider', () => {
     expect(() => anonymousProvider(baseUrl)).toThrow('credentialRef is required for a non-loopback Gateway')
   })
 
+  it('rejects non-HTTP origins and embedded URL state', () => {
+    for (const baseUrl of ['file:///tmp/memory', 'https://user@memory.example', 'https://memory.example/v1', 'https://memory.example?q=1']) {
+      expect(() => new TencentDbHttpProvider({
+        baseUrl, credentialRef: 'TENCENT_KEY', serviceId: 'memory-1', isolationBindings: [binding],
+      }, async () => 'secret-value')).toThrow('must be an HTTP(S) origin')
+    }
+  })
+
   it('rejects an empty ref and keeps an explicit unresolved loopback ref unauthorized', async () => {
     expect(() => new TencentDbHttpProvider({
       baseUrl: 'http://127.0.0.1:8420', credentialRef: ' ', serviceId: 'memory-1',
-      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      isolationBindings: [binding],
     }, async () => undefined)).toThrow('credentialRef must not be empty')
     const local = new TencentDbHttpProvider({
       baseUrl: 'http://127.0.0.1:8420', credentialRef: 'MISSING_KEY', serviceId: 'memory-1',
-      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      isolationBindings: [binding],
     }, async () => undefined)
     await expect(local.search(request())).rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
+    const empty = new TencentDbHttpProvider({
+      baseUrl: 'http://127.0.0.1:8420', credentialRef: 'EMPTY_KEY', serviceId: 'memory-1',
+      isolationBindings: [binding],
+    }, async () => ' ')
+    await expect(empty.search(request())).rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
   })
 
   it('rejects an auth header that collides with fixed protocol headers', () => {
     expect(() => new TencentDbHttpProvider({
-      baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', teamId: 'team-1', agentId: 'agent-1', userId: 'user-1',
+      baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings: [binding],
       authHeader: 'Content-Type',
+    }, async () => undefined)).toThrow('collides with a protocol header')
+    expect(() => new TencentDbHttpProvider({
+      baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings: [binding],
+      authHeader: ' ',
+    }, async () => undefined)).toThrow('collides with a protocol header')
+    expect(() => new TencentDbHttpProvider({
+      baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings: [binding],
+      authHeader: 'X-TDAI-Service-ID',
     }, async () => undefined)).toThrow('collides with a protocol header')
   })
 
@@ -184,7 +331,7 @@ describe('TencentDbHttpProvider', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('1234567890', { status: 200 })))
     const bounded = new TencentDbHttpProvider({
       baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1', maxResponseBytes: 4,
+      isolationBindings: [binding], maxResponseBytes: 4,
     }, async () => 'secret')
     await expect(bounded.search(request())).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
 
@@ -199,7 +346,7 @@ describe('TencentDbHttpProvider', () => {
     })))
     const timed = new TencentDbHttpProvider({
       baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1', timeoutMs: 1,
+      isolationBindings: [binding], timeoutMs: 1,
     }, async () => 'secret-value')
     await expect(timed.search(request())).rejects.toMatchObject({ code: 'MEMORY_RETRYABLE' })
 
@@ -211,6 +358,50 @@ describe('TencentDbHttpProvider', () => {
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 0, data: {} }), { status: 200 })))
     await expect(provider().search(request())).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+
+    vi.stubGlobal('fetch', vi.fn(async () => response([null])))
+    await expect(provider().search(request())).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+    vi.stubGlobal('fetch', vi.fn(async () => response([{ id: 1, content: 'x' }])))
+    await expect(provider().search(request())).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+  })
+
+  it('propagates active cancellation and maps ordinary transport failures', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const pending = provider().search(request(controller.signal))
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    controller.abort(new Error('active cancellation'))
+    await expect(pending).rejects.toThrow('active cancellation')
+
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('connection reset') }))
+    await expect(provider().search(request())).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_UNAVAILABLE' })
+    await expect(provider().search({ ...request(), workspace: undefined as unknown as string }))
+      .rejects.toBeInstanceOf(TypeError)
+  })
+
+  it('observes cancellation that lands while a credential is resolving', async () => {
+    let releaseCredential!: (value: string) => void
+    const resolveCredential = vi.fn(async () => new Promise<string>((resolve) => { releaseCredential = resolve }))
+    const scoped = new TencentDbHttpProvider({
+      baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+      isolationBindings: [binding],
+    }, resolveCredential)
+    const controller = new AbortController()
+    const pending = scoped.search(request(controller.signal))
+    await vi.waitFor(() => expect(resolveCredential).toHaveBeenCalledOnce())
+    controller.abort(new Error('cancelled during credentials'))
+    releaseCredential('secret')
+    await expect(pending).rejects.toThrow('cancelled during credentials')
+  })
+
+  it('rejects unsupported depth and a non-absolute caller workspace', async () => {
+    await expect(provider().search({ ...request(), depth: 'L0' as 'L1' }))
+      .rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    await expect(provider().search({ ...request(), workspace: 'relative/path' }))
+      .rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
   })
 
   it('captures a scoped DSH session through the v3 conversation route', async () => {
@@ -232,7 +423,8 @@ describe('TencentDbHttpProvider', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(provider().capture({
-      sessionId: 'dsh-session-1',
+      ...captureScope,
+      sessionId: SessionId('dsh-session-1'),
       messages: [{ role: 'user', content: 'remember this' }, { role: 'assistant', content: 'noted' }],
       signal: new AbortController().signal,
     })).resolves.toBeUndefined()
@@ -240,12 +432,15 @@ describe('TencentDbHttpProvider', () => {
 
   it('fails closed for invalid capture input, credentials, envelopes, HTTP failures, cancellation, and timeout', async () => {
     const capture = (overrides: Partial<Parameters<TencentDbHttpProvider['capture']>[0]> = {}) => ({
-      sessionId: 'session-1', messages: [{ role: 'user' as const, content: 'hello' }],
+      ...captureScope, sessionId: SessionId('session-1'), messages: [{ role: 'user' as const, content: 'hello' }],
       signal: new AbortController().signal, ...overrides,
     })
-    await expect(provider().capture(capture({ sessionId: ' ' }))).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    await expect(provider().capture(capture({ sessionId: SessionId(' ') }))).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    await expect(provider().capture(capture({ sessionId: undefined as unknown as SessionId }))).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await expect(provider().capture(capture({ messages: [] }))).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await expect(provider().capture(capture({ messages: [{ role: 'user', content: ' ' }] }))).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    await expect(provider().capture(capture({ messages: null as unknown as [] }))).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
+    await expect(provider().capture(capture({ messages: [{ role: 'user', content: 42 as unknown as string }] }))).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await expect(provider().capture(capture({ messages: [{ role: 'tool' as 'user', content: 'output' }] }))).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await expect(provider(async () => undefined).capture(capture())).rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
 
@@ -265,18 +460,18 @@ describe('TencentDbHttpProvider', () => {
     })))
     const timed = new TencentDbHttpProvider({
       baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1', timeoutMs: 1,
+      isolationBindings: [binding], timeoutMs: 1,
     }, async () => 'secret-value')
     await expect(timed.capture(capture())).rejects.toMatchObject({ code: 'MEMORY_RETRYABLE' })
   })
 
   it('bounds capture request and response sizes', async () => {
     await expect(provider().capture({
-      sessionId: 'session-1', messages: Array.from({ length: 101 }, () => ({ role: 'user', content: 'x' })),
+      ...captureScope, sessionId: SessionId('session-1'), messages: Array.from({ length: 101 }, () => ({ role: 'user', content: 'x' })),
       signal: new AbortController().signal,
     })).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await expect(provider().capture({
-      sessionId: 'session-1', messages: [{ role: 'user', content: 'x'.repeat(8_193) }],
+      ...captureScope, sessionId: SessionId('session-1'), messages: [{ role: 'user', content: 'x'.repeat(8_193) }],
       signal: new AbortController().signal,
     })).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
 
@@ -292,28 +487,39 @@ describe('TencentDbHttpProvider', () => {
       },
     }), { status: 200 })))
     await expect(provider().capture({
-      sessionId: 'session-1', messages: boundaryMessages, signal: new AbortController().signal,
+      ...captureScope, sessionId: SessionId('session-1'), messages: boundaryMessages, signal: new AbortController().signal,
     })).resolves.toBeUndefined()
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response('1234567890', { status: 200 })))
     const bounded = new TencentDbHttpProvider({
       baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
-      teamId: 'team-1', agentId: 'agent-1', userId: 'user-1', maxResponseBytes: 4,
+      isolationBindings: [binding], maxResponseBytes: 4,
     }, async () => 'secret')
     await expect(bounded.capture({
-      sessionId: 'session-1', messages: [{ role: 'assistant', content: 'ok' }], signal: new AbortController().signal,
+      ...captureScope, sessionId: SessionId('session-1'), messages: [{ role: 'assistant', content: 'ok' }], signal: new AbortController().signal,
     })).rejects.toMatchObject({ code: 'MEMORY_PROVIDER_ERROR' })
+
+    const hugeScope = new TencentDbHttpProvider({
+      baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
+      isolationBindings: [{ ...binding, teamId: 'x'.repeat(1_048_576) }],
+    }, async () => 'secret')
+    await expect(hugeScope.capture({
+      ...captureScope, sessionId: SessionId('session-1'), messages: [{ role: 'user', content: 'x' }],
+      signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
   })
 
   it('rejects malformed conversation acceptance details', async () => {
     const capture = () => provider().capture({
-      sessionId: 'session-1', messages: [{ role: 'user', content: 'hello' }],
+      ...captureScope, sessionId: SessionId('session-1'), messages: [{ role: 'user', content: 'hello' }],
       signal: new AbortController().signal,
     })
     for (const data of [
       {},
       { accepted_ids: [], accepted_versions: [], total_count: 0 },
       { accepted_ids: ['message-1'], accepted_versions: [], total_count: 1 },
+      { accepted_ids: [''], accepted_versions: ['v1'], total_count: 1 },
+      { accepted_ids: ['message-1'], accepted_versions: [''], total_count: 1 },
       { accepted_ids: ['message-1'], accepted_versions: ['v1'], total_count: 2 },
     ]) {
       vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 0, data }), { status: 200 })))

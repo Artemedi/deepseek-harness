@@ -9,6 +9,15 @@ export type MemoryId = Branded<'MemoryId'>
 /** Explicit provider memory layer. */
 export type MemoryDepth = 'L0' | 'L1' | 'L2' | 'L3'
 
+/** Closed, non-sensitive failure vocabulary permitted in durable memory diagnostics. */
+export type MemoryDiagnosticCode =
+  | 'MEMORY_INVALID_REQUEST'
+  | 'MEMORY_STALE_AGENT'
+  | 'MEMORY_UNAUTHORIZED'
+  | 'MEMORY_RETRYABLE'
+  | 'MEMORY_PROVIDER_UNAVAILABLE'
+  | 'MEMORY_PROVIDER_ERROR'
+
 /** One model-visible citation returned by the local session-history provider. */
 export interface MemoryHit {
   /** Stable local identity formed from the source session and event sequence. */
@@ -49,6 +58,8 @@ export interface MemorySearchRequest {
 export interface MemoryProviderSearchRequest {
   /** Canonical workspace derived from the live Agent session. */
   readonly workspace: string
+  /** Effective durable agent-preset identity, absent when the session uses no preset. */
+  readonly agentPreset?: string
   /** Literal query selected by the explicit consumer. */
   readonly query: string
   /** Validated result count bound. */
@@ -78,6 +89,8 @@ export interface MemoryCaptureRequest {
 export interface MemoryProviderCaptureRequest extends MemoryCaptureRequest {
   readonly sessionId: SessionId
   readonly workspace: string
+  /** Effective durable agent-preset identity, absent when the session uses no preset. */
+  readonly agentPreset?: string
 }
 
 /** Provider-neutral retrieval implementation used behind `ctx.memory`. */
@@ -128,14 +141,14 @@ export interface MemoryCaptureSucceededEvent {
 
 /** Durable safe failure of one remote-memory turn export. */
 export interface MemoryCaptureFailedEvent extends MemoryCaptureSucceededEvent {
-  readonly code: string
+  readonly code: MemoryDiagnosticCode
 }
 
 /** Durable failure of automatic recall that did not block the model turn. */
 export interface MemoryRecallFailedEvent {
   readonly version: 1
   readonly provider: 'tencentdb'
-  readonly code: string
+  readonly code: MemoryDiagnosticCode
   readonly depth?: 'L1' | 'L2' | 'L3'
 }
 
@@ -144,9 +157,13 @@ declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /** Exact bounded citations returned by one explicit memory search. */
     'memory/search': MemorySearchEvent
+    /** Intent durably flushed before exporting one completed turn to TencentDB. */
     'memory/capture-requested': MemoryCaptureRequestedEvent
+    /** Confirmation that TencentDB accepted every message from one exported turn. */
     'memory/capture-succeeded': MemoryCaptureSucceededEvent
+    /** Safe failure class recorded after one requested TencentDB turn export fails. */
     'memory/capture-failed': MemoryCaptureFailedEvent
+    /** Safe per-layer recall failure that does not block the owning model turn. */
     'memory/recall-failed': MemoryRecallFailedEvent
   }
 }

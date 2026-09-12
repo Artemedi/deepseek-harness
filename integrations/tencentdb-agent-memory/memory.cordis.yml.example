@@ -17,9 +17,15 @@
           baseUrl: http://127.0.0.1:8420
           # credentialRef: TDAI_MEMORY_API_KEY
           serviceId: default
-          teamId: default
-          agentId: default
-          userId: default
+          # Every DSH workspace/effective preset needs its own provisioned
+          # TencentDB Team/Agent profile. Omit agentPreset only for sessions
+          # composed without the agent-presets service.
+          isolationBindings:
+            - workspace: /absolute/path/to/project
+              agentPreset: standard
+              teamId: default
+              agentId: default
+              userId: default
         # Managed mode starts an already installed, commit-pinned MemoryCore
         # checkout and stops it with this DSH composition. Replace both paths.
         tencentdbRuntime:
