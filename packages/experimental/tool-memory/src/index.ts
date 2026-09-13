@@ -2,9 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { InferValue, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-experimental-memory'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 
 /** Cordis plugin name. */
 export const name = 'tool-memory'
@@ -36,21 +34,6 @@ const SEARCH_OUTPUT_SCHEMA = {
   },
 } as const
 
-function jsonOutput<const S extends ValueSchemaSpec>(schema: S): {
-  schema: S
-  render: (args: unknown, value: InferValue<S>) => [{ type: 'text'; text: string }]
-} {
-  return {
-    schema,
-    render: (_args: unknown, value: InferValue<S>) => [{ type: 'text', text: JSON.stringify(value) }],
-  }
-}
-
-function callingAgent(agent: Agent | undefined): Agent {
-  if (agent === undefined) throw new Error('memory_search requires a calling Agent')
-  return agent
-}
-
 /** Register the explicit memory_search tool. */
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
@@ -63,9 +46,13 @@ export function apply(ctx: Context): void {
       provider: { type: 'string', description: 'Explicit provider: local, tencentdb, or openviking.' },
       depth: { type: 'string', description: 'Memory layer: OpenViking requires L0-L2; TencentDB accepts L1-L3.' },
     },
-    output: jsonOutput(SEARCH_OUTPUT_SCHEMA),
+    output: {
+      schema: SEARCH_OUTPUT_SCHEMA,
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
     async execute(args, exec) {
-      const agent = callingAgent(exec.agent)
+      const agent = exec.agent
+      if (agent === undefined) throw new Error('memory_search requires a calling Agent')
       const provider = args.provider
       if (provider !== undefined && provider !== 'local' && provider !== 'tencentdb' && provider !== 'openviking') {
         throw new Error('memory_search provider must be local, tencentdb, or openviking')

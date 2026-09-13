@@ -11,14 +11,23 @@ export const name = 'memory-invariant'
 /** Services required to inspect owned session events. */
 export const inject = ['invariants']
 
+function validateMemoryEvent(
+  session: Session,
+  event: SessionEvent,
+  fail: InvariantFailure,
+): void {
+  if (event.type !== 'memory/search') return
+  if (session.header.cwd === undefined || event.data.workspace !== session.header.cwd) {
+    fail(`memory search event ${event.seq} must retain the owning session workspace`)
+  }
+}
+
 /** Reject observations whose claimed workspace differs from the owning session. */
 const install: InvariantInstaller = Object.assign((ctx: Context, fail: InvariantFailure) => {
   ctx.on('internal/dispatch', (_mode, eventName, args) => {
-    if (eventName !== 'session/event') return
-    const [session, event] = args as [Session, SessionEvent]
-    if (event.type !== 'memory/search') return
-    if (session.header.cwd === undefined || event.data.workspace !== session.header.cwd) {
-      fail(`memory search event ${event.seq} must retain the owning session workspace`)
+    if (eventName === 'session/event') {
+      const [session, event] = args as [Session, SessionEvent]
+      validateMemoryEvent(session, event, fail)
     }
   }, { global: true })
 }, { inject: ['sessions'] })
