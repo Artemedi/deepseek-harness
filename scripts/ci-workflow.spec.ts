@@ -942,8 +942,9 @@ describe('Issue lifecycle workflow', () => {
 
     // The job has no job-level `if`, so it is listed on every pull_request /
     // pull_request_review event and reports success instead of a gray skip. The
-    // write-capable steps are gated at step level so approved/commented reviews
-    // never mint a Project/Issue App token nor touch the board.
+    // write-capable steps are gated at step level so forks and
+    // approved/commented reviews never mint a Project/Issue App token nor touch
+    // the upstream repository's board.
     expect(lifecycle.on).toHaveProperty('pull_request')
     expect(lifecycle.on).toHaveProperty('pull_request_review')
     expect(lifecycleJob.if).toBeUndefined()
@@ -956,7 +957,8 @@ describe('Issue lifecycle workflow', () => {
     expect(lifecyclePullRequest.types).not.toContain('ready_for_review')
     expect(lifecyclePullRequest.types).toContain('review_requested')
     expect(lifecycleReview.types).toEqual(['submitted'])
-    const gated = "${{ github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested' }}"
+    const gated =
+      "${{ github.repository == 'deepseek-harness/deepseek-harness' && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested') }}"
     const steps = lifecycleJob.steps.filter(isRecord)
     const tokenStep = steps.find(s => s.name === 'Create project token')
     const handleStep = steps.find(s => s.name === 'Handle repository event')
@@ -976,7 +978,7 @@ describe('Issue lifecycle workflow', () => {
     const tokenStep = steps.find(step => step.name === 'Create Project read token')
     const validateStep = steps.find(step => step.name === 'Validate pull request')
     const humanPullRequest =
-      "${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}"
+      "${{ github.repository == 'deepseek-harness/deepseek-harness' && github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}"
 
     expect(tokenStep).toMatchObject({
       id: 'app-token',
