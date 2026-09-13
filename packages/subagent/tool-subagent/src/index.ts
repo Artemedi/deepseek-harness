@@ -76,6 +76,18 @@ export interface Config {
    * budget belongs to the child runtime or its own deployment.
    */
   maxDepth?: number | 'provider-managed'
+  /**
+   * Reject mount unless `agentOptions.provider` and `agentOptions.model` are
+   * both set (default `false`). `spawn`/`fork` silently inherit the parent's
+   * current model when `agentOptions` is absent (dsh-subagent-spawn-in-process,
+   * dsh-subagent-fork-in-process); a deployment that dedicates an instance to a
+   * specific route (a free-tier gateway, a cost cap) sets this to fail loud at
+   * load instead of drifting onto whatever the parent happens to run today.
+   * Providers that select their own model independently of `agentOptions`
+   * (`claude-code`, `codex`) are unaffected either way — the flag only gates
+   * this tool's own config, not provider behavior.
+   */
+  requireExplicitModel?: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -89,6 +101,7 @@ export const Config: z<Config> = z.object({
     model: z.string(),
     maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
   }).default(undefined as unknown as { provider: string; model: string; maxTokens: number }),
+  requireExplicitModel: z.boolean().default(false),
   persona: z.string(),
   // Preserve omission; Schemastery's `{ allow: [] }` default would deny every tool.
   toolFilter: z.object({
@@ -97,6 +110,20 @@ export const Config: z<Config> = z.object({
   }).default(undefined as unknown as { allow: string[]; deny: string[] }),
   maxDepth: z.union([z.natural().max(Number.MAX_SAFE_INTEGER), z.const('provider-managed' as const)]).default(3),
 })
+
+/**
+ * ` (provider/model)` naming the child's explicit route, or empty when it
+ * inherits the parent's current model. Surfaced directly in the parent's own
+ * transcript so the requested route is visible without opening the child's
+ * session log.
+ */
+function requestedModelSuffix(agentOptions: Config['agentOptions']): string {
+  if (agentOptions === undefined) return ''
+  if (agentOptions.provider !== undefined && agentOptions.model !== undefined) return ` (${agentOptions.provider}/${agentOptions.model})`
+  if (agentOptions.model !== undefined) return ` (model: ${agentOptions.model})`
+  if (agentOptions.provider !== undefined) return ` (provider: ${agentOptions.provider})`
+  return ''
+}
 
 /** Render text blocks from the canonical JSON block array without trusting arbitrary values. */
 function outputValueText(values: JsonValue[]): string {
@@ -281,6 +308,14 @@ export function apply(ctx: Context, config: Config): void {
   if (config.toolFilter !== undefined && config.toolFilter.allow === undefined && config.toolFilter.deny === undefined) {
     throw new Error('tool-subagent: `toolFilter` is configured but names neither `allow` nor `deny` — remove the key or fill the filter')
   }
+  if (config.requireExplicitModel === true
+    && (config.agentOptions?.provider === undefined || config.agentOptions.provider.length === 0
+      || config.agentOptions.model === undefined || config.agentOptions.model.length === 0)) {
+    throw new Error(
+      'tool-subagent: `requireExplicitModel` is set but `agentOptions.provider`/`agentOptions.model` are absent — '
+      + 'name the model explicitly or remove `requireExplicitModel` to allow silent inheritance from the parent',
+    )
+  }
   const backgroundEnabled = config.enableRunInBackground !== false
   const continuable = (config.backgroundMode ?? 'one-shot') === 'continuable'
   const toolName = config.toolName ?? 'subagent'
@@ -366,9 +401,9 @@ export function apply(ctx: Context, config: Config): void {
         render: (_args, value) => [{
           type: 'text',
           text: value.kind === 'background'
-            ? `started background subagent job ${value.jobId}`
+            ? `started background subagent job ${value.jobId}${requestedModelSuffix(config.agentOptions)}`
             : value.kind === 'continuable'
-              ? `started subagent ${value.subagentId}`
+              ? `started subagent ${value.subagentId}${requestedModelSuffix(config.agentOptions)}`
               : outputValueText(value.output),
         }],
       },

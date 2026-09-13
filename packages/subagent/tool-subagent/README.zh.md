@@ -23,9 +23,12 @@
 | `enableRunInBackground` | 公开后台模式，默认 `true`；禁用时也会拒绝强制后台调用。 |
 | `backgroundMode` | 后台生命周期策略，默认 `one-shot`。`one-shot` 默认前台调用；`continuable` 默认后台调用，要求提供方具备 `prepareContinuable` 能力，并返回持久化子 agent ID，且不要求加载后续消息工具。 |
 | `agentOptions` | 传给具体提供方的子 agent `provider`、`model` 和正整数 `maxTokens`；进程内提供方会用显式值覆盖继承的父级选项。省略它对 `spawn`/`fork` 并非中性选择：子 agent 会在启动那一刻继承父级当时使用的任意模型（参见 [dsh-subagent-spawn-in-process](../subagent-spawn-in-process/README.zh.md)），一旦父级自身的模型发生变化,这个继承结果也会随之默默改变。要让某条委派路径始终使用固定模型（与父级无关），需显式设置 `agentOptions.provider`/`model`。 |
+| `requireExplicitModel` | 默认 `false`。设为 `true` 时，除非 `agentOptions.provider` 和 `agentOptions.model` 都已设置，否则挂载失败——这是针对上述静默继承的配置层防护：某个部署把一个实例专门绑定到某条路由（免费层网关、成本上限）时，希望遗漏配置能在加载时就大声失败，而不是悄悄漂移到父级当下使用的任意模型。忽略 `agentOptions`、自行选择模型的提供方（`claude-code`、`codex`）不受此项影响。 |
 | `persona` | 每个子 agent 独立的 persona；要求提供方具备 `persona` 能力。 |
 | `toolFilter` | 每个子 agent 独立的全局工具限制；要求提供方具备 `toolFilter` 能力。 |
 | `maxDepth` | 绝对委派深度上限，默认 `3`（`0` 禁止委派）；数值上限要求 `depthLimit` 能力，缺失时挂载失败。对于预算由子 harness 拥有的进程外提供方，`'provider-managed'` 不发送上限。工具在达到上限时仍然可见；每次尝试启动都会检查调用 agent 的当前深度，被拒绝时返回出错的工具结果。 |
+
+当 `agentOptions` 同时设置了 provider 和 model 时，每一条 `started subagent <id>` / `started background subagent job <id>` 结果都会以 `(provider/model)` 的形式附带所请求的路由，这样父级自身的会话记录就能直接看到当初请求了什么，无需打开子 agent 的会话日志。
 
 ## 并发
 

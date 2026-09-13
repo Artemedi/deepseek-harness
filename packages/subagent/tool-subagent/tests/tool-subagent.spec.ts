@@ -771,6 +771,32 @@ describe('dsh-tool-subagent', () => {
     const fiber = ctx.plugin(tool, { provider: 'p', toolFilter: {} })
     await expect(fiber).rejects.toThrow(/names neither `allow` nor `deny`/)
   })
+
+  it('requireExplicitModel without agentOptions fails at plugin load, not at first delegation', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SubagentRuntime)
+    ctx.subagents.registerProvider({
+      name: 'p',
+      capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+      inheritsParentContext: false,
+      start: () => { throw new Error('unreachable') },
+    })
+    const fiber = ctx.plugin(tool, { provider: 'p', requireExplicitModel: true })
+    await expect(fiber).rejects.toThrow(/requireExplicitModel.*is set but.*agentOptions/)
+  })
+
+  it('requireExplicitModel with a named provider and model loads and delegates normally', async () => {
+    const ctx = await setup({
+      provider: 'mock',
+      requireExplicitModel: true,
+      agentOptions: { provider: 'nine-router', model: 'dsh-agent' },
+    })
+    const result = await callSubagent(ctx, { description: 'd', prompt: 'p' })
+    expect(result.isError).toBe(false)
+  })
+
 })
 
 describe('dsh-tool-subagent background mode', () => {
@@ -846,7 +872,7 @@ describe('dsh-tool-subagent background mode', () => {
     expect(start.isError).toBe(false)
     if (start.isError) throw new Error('expected background subagent success')
     expect(start.value).toEqual({ kind: 'background', jobId: 'subagent-1' })
-    expect(text(start)).toBe('started background subagent job subagent-1')
+    expect(text(start)).toBe('started background subagent job subagent-1 (model: child-model)')
 
     const collected = await ctx.tools.execute({
       signal: testToolSignal,
@@ -866,6 +892,16 @@ describe('dsh-tool-subagent background mode', () => {
       agent: parent,
     })
     expect(text(again)).toBe('background answer\n[status: completed]')
+  })
+
+  it('surfaces the full requested provider/model in the started-subagent text, not just the child log', async () => {
+    const ctx = await backgroundSetup({
+      provider: 'mock',
+      agentOptions: { provider: 'nine-router', model: 'dsh-agent' },
+    }, { reply: 'background answer' })
+    const parent = ownerAgent(ctx, 'sess-parent')
+    const started = await callSubagent(ctx, { description: 'd', prompt: 'p', run_in_background: true }, { agent: parent })
+    expect(text(started)).toBe('started background subagent job subagent-1 (nine-router/dsh-agent)')
   })
 
   it('preserves provider diagnostics in one-shot background failure detail', async () => {

@@ -23,9 +23,12 @@ A foreground call passes the execution signal through startup and execution, awa
 | `enableRunInBackground` | Exposes background mode, default `true`; disabling also rejects forced background calls. |
 | `backgroundMode` | Background lifecycle policy, default `one-shot`. `one-shot` defaults calls to foreground; `continuable` defaults them to background, requires the provider's `prepareContinuable` capability, and returns a durable child id without requiring the follow-up tool. |
 | `agentOptions` | Provider-specific child `provider`, `model`, and positive `maxTokens`; the in-process provider treats explicit values as overrides of inherited parent options. Omitting it is not neutral for `spawn`/`fork`: the child then inherits whatever model the parent currently has at spawn time (see [dsh-subagent-spawn-in-process](../subagent-spawn-in-process/README.md)), which changes silently whenever the parent's own model changes. Set `agentOptions.provider`/`model` explicitly to pin a delegation route to a specific model regardless of the parent's. |
+| `requireExplicitModel` | Default `false`. `true` rejects mount unless `agentOptions.provider` and `agentOptions.model` are both set — the config-level guard against the silent inheritance above, for a deployment that dedicates an instance to one route (a free-tier gateway, a cost cap) and wants a misconfigured omission to fail loud at load rather than drift onto whatever the parent runs today. Providers that ignore `agentOptions` and select their own model independently (`claude-code`, `codex`) are unaffected either way. |
 | `persona` | Per-child persona; requires provider `persona` capability. |
 | `toolFilter` | Per-child global-tool restriction; requires `toolFilter` capability. |
 | `maxDepth` | Absolute delegation-depth cap, default `3` (`0` forbids delegation); a numeric cap requires the `depthLimit` capability and fails the mount without it. `'provider-managed'` sends no cap for an out-of-process provider whose budget belongs to the child harness. The tool stays visible at the cap; each attempted start checks the calling agent's current depth and returns an errored tool result when rejected. |
+
+Every `started subagent <id>` / `started background subagent job <id>` result also names the requested route as `(provider/model)` when `agentOptions` sets both, so the parent's own transcript records what was asked for without opening the child's session log.
 
 ## Concurrency
 
