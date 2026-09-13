@@ -327,12 +327,17 @@ describe('CI workflow', () => {
       linuxAggregate: aggregate['runs-on'] as string,
       windows: windowsBuild['runs-on'] as string,
     }
-    const evaluate = (expression: string, vars: Record<string, string>, login = 'maintainer'): unknown => {
+    const evaluate = (
+      expression: string,
+      vars: Record<string, string>,
+      login = 'maintainer',
+      repository = 'deepseek-harness/deepseek-harness',
+    ): unknown => {
       const body = expression.trim().slice(3, -2)
       return runInNewContext(body, {
         vars,
         fromJSON: JSON.parse,
-        github: { event: { pull_request: { user: { login } } } },
+        github: { repository, event: { pull_request: { user: { login } } } },
       }, { timeout: 1000 })
     }
     for (const [name, selector, variable, pool, hosted] of [
@@ -349,6 +354,8 @@ describe('CI workflow', () => {
         expect(evaluate(selector, { [variable]: mode }), `${name} default on ${mode}`).toBe(hosted)
       }
     }
+    expect(evaluate(selectors.linux, {}, 'maintainer', 'Artemedi/deepseek-harness')).toBe('ubuntu-24.04')
+    expect(evaluate(selectors.windows, {}, 'maintainer', 'Artemedi/deepseek-harness')).toBe('windows-2025')
 
     // The run-gates aggregate lanes stop at the first blocking gate failure so
     // a red aggregate does not keep burning runner time on the remaining
