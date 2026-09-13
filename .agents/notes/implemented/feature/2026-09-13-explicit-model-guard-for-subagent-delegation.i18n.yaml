@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-13-explicit-model-guard-for-subagent-delegation.md
+2026-09-13-explicit-model-guard-for-subagent-delegation.md: c21483ee6b4a9c97d9cf665f7d032a7a3dba49d9
+2026-09-13-explicit-model-guard-for-subagent-delegation.zh.md: fc68a2541c7840e7ccc2281ad8d24f77ceaaa407
