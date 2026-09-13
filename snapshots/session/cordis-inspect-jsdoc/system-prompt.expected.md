@@ -284,7 +284,7 @@ interface ToolArgsMap {
     /** The agent id of the running agent to interrupt. */
     agent_id: string;
   } & Record<string, JsonValue>;
-  /** Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops. */
+  /** Request cancellation of a running background job by job id. Returns immediately; the job settles as killed once its work actually stops. Use this with job ids returned by background `subagent` calls, not with agent ids from `list_agents`. */
   job_kill: {
     /** Job id returned by the tool that started the background work. */
     job_id: string;
@@ -293,7 +293,7 @@ interface ToolArgsMap {
   } & Record<string, JsonValue>;
   /** List your background jobs (running and finished) with their ids, kinds, and statuses. */
   job_list: Record<string, JsonValue>;
-  /** Read a background job. Stream jobs return only output since the previous read; final-output jobs return their result after settlement. Every response ends with `[status: ...]`. Reads are non-blocking unless `wait: true`, which waits up to the configured cap. */
+  /** Read a background job. Stream jobs return only output since the previous read; final-output jobs return their result after settlement. Every response ends with `[status: ...]`. Reads are non-blocking unless `wait: true`, which waits up to the configured cap. Use this with job ids returned by background `subagent` calls, not with agent ids from `list_agents`. */
   job_output: {
     /** Job id returned by the tool that started the background work. */
     job_id: string;
@@ -302,7 +302,7 @@ interface ToolArgsMap {
     /** Max wait in milliseconds (only meaningful with wait: true). Defaults to the configured wait timeout; capped by the configured maximum. */
     timeout_ms?: number;
   } & Record<string, JsonValue>;
-  /** List your continuable background subagents by durable id and label. Use it to recall which ones you started, not to poll for completion — you are told when one finishes. Status comes from the live registry: running means the agent is working right now, idle means it is loaded but between turns (it may be waiting on agents it started), and ready means it exists only in storage — resumable, not terminal, and not a result waiting to be collected; a `send_message` steers a running child at its nearest step boundary or starts a turn for an idle or ready child, and a direct child remains a `send_message` candidate in every status. The snapshot is not a delivery promise — `send_message` performs the authoritative check and may still fail. Children that could not be read are reported as diagnostics instead of being silently dropped. Scope `descendants` walks the whole tree below you in stable pre-order, annotating each entry with its durable direct-parent session id and depth. You may use `send_message` only for depth-1 entries; deeper entries are candidates for `interrupt_agent` only. */
+  /** List your continuable background subagents by durable id and label. Use it to recall which ones you started, not to poll for completion — you are told when one finishes. Status comes from the live registry: running means the agent is working right now, idle means it is loaded but between turns (it may be waiting on agents it started), and ready means it exists only in storage — resumable, not terminal, and not a result waiting to be collected; a `send_message` steers a running child at its nearest step boundary or starts a turn for an idle or ready child, and a direct child remains a `send_message` candidate in every status. The snapshot is not a delivery promise — `send_message` performs the authoritative check and may still fail. Children that could not be read are reported as diagnostics instead of being silently dropped. Scope `descendants` walks the whole tree below you in stable pre-order, annotating each entry with its durable direct-parent session id and depth. You may use `send_message` only for depth-1 entries; deeper entries are candidates for `interrupt_agent` only. The ids returned here are agent ids for `send_message` and `interrupt_agent`; they are not job ids and cannot be used with `job_output` or `job_kill`. */
   list_agents: {
     /** children (default) lists direct children only; descendants walks the complete tree below you. */
     scope?: "children" | "descendants";
