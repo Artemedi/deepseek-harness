@@ -113,6 +113,9 @@ declare module '@deepseek-ai/cordis' {
  *   when the top-level process exits.
  */
 export abstract class SubprocessRuntime extends Service {
+  /** Execution-world classification for consumers that must remain on the DSH host. */
+  readonly executionWorld: 'unspecified' | 'local-host' | 'remote' = 'unspecified'
+
   constructor(ctx: Context) {
     super(ctx, 'subprocess')
   }

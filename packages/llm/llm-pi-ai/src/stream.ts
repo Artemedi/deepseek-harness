@@ -39,6 +39,11 @@ export function mapUsage(usage: PiUsage): TokenUsage {
 // wrapper a bare `terminated`, so we are left pattern-matching terse words here.
 // If pi-ai ever forwards the original Error (or a fetch/dispatcher hook that lets
 // us capture the cause ourselves), classify on `code`/`cause` instead of text.
+function httpStatusOf(message: string): number | undefined {
+  const match = message.match(/(?:^|HTTP\s+|API error\s*\()([1-5]\d\d)\b/i)
+  return match === null ? undefined : Number(match[1])
+}
+
 function classifyPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
@@ -47,6 +52,11 @@ function classifyPiAiError(message: string): string {
   // same request cannot succeed, so it is invalid, not transient.
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
+  // OpenAI-compatible gateways sometimes flatten an upstream 5xx into this
+  // exact body and pi-ai discards the status before it reaches this boundary.
+  // It contains no permanent rejection fact, so recover it as a transient
+  // server failure rather than bypassing the provider's retry policy.
+  if (/^upstream error\.?$/i.test(message)) return 'SERVER'
   if (/\b5\d\d\b/.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
@@ -83,11 +93,14 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     && message.errorMessage !== undefined
     && isContextWindowExceededError(message.errorMessage)
   if (piAiOverflow || harnessOverflow) {
+    const text = message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`
+    const status = httpStatusOf(text)
     return {
       kind: 'error',
       failure: {
-        message: message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`,
+        message: text,
         code: CONTEXT_WINDOW_EXCEEDED_CODE,
+        ...(status === undefined ? {} : { status }),
       },
     }
   }
@@ -122,7 +135,15 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
-      return { kind: 'error', failure: { message: text, code: classifyPiAiError(text) } }
+      const status = httpStatusOf(text)
+      return {
+        kind: 'error',
+        failure: {
+          message: text,
+          code: classifyPiAiError(text),
+          ...(status === undefined ? {} : { status }),
+        },
+      }
     }
   }
 }

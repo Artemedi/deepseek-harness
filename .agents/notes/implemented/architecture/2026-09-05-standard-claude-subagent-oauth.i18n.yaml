@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-05-standard-claude-subagent-oauth.md
+2026-09-05-standard-claude-subagent-oauth.md: cca408385764ee4df587490487c75d9c4a918205
+2026-09-05-standard-claude-subagent-oauth.zh.md: 4d8ea77d2166b0296a6e103f3b683abd3dd02019

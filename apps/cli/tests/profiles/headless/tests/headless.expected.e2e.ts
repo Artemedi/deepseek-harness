@@ -31,6 +31,10 @@ const credentialsConfigPath = fileURLToPath(new URL('../credentials-snapshot.pat
 const invalidCredentialScenarioDir = join(goldensDir, 'invalid-credential')
 const settlementScenarioDir = join(goldensDir, 'subagent-settlement')
 const settlementConfigPath = fileURLToPath(new URL('../subagent-settlement-snapshot.patch.yml', import.meta.url))
+const memoryScenarioDir = join(goldensDir, 'experimental-memory')
+const memoryConfigPath = fileURLToPath(new URL('../memory-snapshot.patch.yml', import.meta.url))
+const workflowScenarioDir = join(goldensDir, 'bounded-workflow')
+const workflowConfigPath = fileURLToPath(new URL('../workflow-snapshot.patch.yml', import.meta.url))
 const teamConfigPath = fileURLToPath(new URL('../team-snapshot.patch.yml', import.meta.url))
 const startupFailureConfigPath = fileURLToPath(new URL('./fixtures/startup-activation-error/activation-error.patch.yml', import.meta.url))
 const startupFailurePluginUrl = new URL('./fixtures/startup-activation-error/activation-error.mjs', import.meta.url).href
@@ -285,6 +289,69 @@ describe('headless stream-json snapshots', () => {
     expect(result.stdout).toBe('')
     await expect(result.stderr.replace(startupFailurePluginUrl, './activation-error.mjs'))
       .toMatchFileSnapshot(startupFailureExpected)
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+
+  it('runs the opt-in experimental memory tool through the real one-shot app', async () => {
+    const streamExpected = join(memoryScenarioDir, 'stream-json.expected.jsonl')
+    let runCwd = ''
+    const result = await runLoaderSmoke({
+      label: 'experimental memory headless stream-json snapshot',
+      tempDirPrefix: 'headless-snapshot-experimental-memory-',
+      binScript,
+      libBinScript: binScript,
+      configPath: memoryConfigPath,
+      binArgs: [memoryConfigPath, 'Find the retry evidence.'],
+      tsconfigPath,
+      env: {
+        DSH_SNAPSHOT: 'replay',
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+      },
+      prepare: (cwd) => { runCwd = cwd },
+      inspect: async (cwd) => {
+        const logs = await persistedLogs(cwd)
+        expect(logs).toHaveLength(1)
+        expect(logs[0]?.content).toContain('memory/search')
+        expect(logs[0]?.content).toContain('gateway retry evidence is recorded')
+      },
+    })
+
+    expect(result.stderr).toBe('')
+    const normalized = normalizeHeadlessStream(result.stdout, runCwd)
+    if (refreshing) await writeFile(streamExpected, normalized)
+    await expectHeadlessStream(normalized, streamExpected)
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
+
+  it('runs a bounded coordinator, worker, and review through the real one-shot app', async () => {
+    const streamExpected = join(workflowScenarioDir, 'stream-json.expected.jsonl')
+    let runCwd = ''
+    const result = await runLoaderSmoke({
+      label: 'bounded workflow headless stream-json snapshot',
+      tempDirPrefix: 'headless-snapshot-bounded-workflow-',
+      binScript,
+      libBinScript: binScript,
+      configPath: workflowConfigPath,
+      binArgs: [workflowConfigPath, 'Run the bounded workflow.'],
+      tsconfigPath,
+      env: {
+        DSH_SNAPSHOT: 'replay',
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+      },
+      prepare: (cwd) => { runCwd = cwd },
+      inspect: async (cwd) => {
+        const logs = await persistedLogs(cwd)
+        expect(logs.length).toBeGreaterThanOrEqual(3)
+        const content = logs.map(log => log.content).join('\n')
+        expect(content).toContain('tool-workflow/run-start')
+        expect(content).toContain('tool-workflow/agent-start')
+        expect(content).toContain('tool-workflow/agent-end')
+        expect(content).toContain('tool-workflow/run-end')
+      },
+    })
+
+    expect(result.stderr).toBe('')
+    const normalized = normalizeHeadlessStream(result.stdout, runCwd)
+    if (refreshing) await writeFile(streamExpected, normalized)
+    await expectHeadlessStream(normalized, streamExpected)
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
   it('retries a transient provider failure through the one-shot app', async () => {

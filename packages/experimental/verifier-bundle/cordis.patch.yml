@@ -1,0 +1,14 @@
+- insert:
+    - id: experimental-verifier
+      name: '@deepseek-ai/dsh-experimental-verifier'
+      config:
+        baseUrl: https://api.mistral.ai/v1
+        model: mistral-small-2603
+        apiKeyEnv: MISTRAL_API_KEY
+        maxTokens: 64
+        timeoutMs: 30000
+        maxEvidenceBytes: 16384
+        maxRationaleBytes: 1024
+
+    - id: experimental-tool-verifier
+      name: '@deepseek-ai/dsh-experimental-tool-verifier'

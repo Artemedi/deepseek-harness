@@ -314,6 +314,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns per-assistant-message feedback in the canonical Session log, target validation, per-item compare-and-set, and the Host unary Remote contract. Feedback stays outside model history; log export follows the consumer policy.',
   },
   {
+    key: 'sessionFeedback',
+    pkg: 'command-feedback',
+    title: 'Session-level feedback recorder',
+    mode: 'core',
+    note: 'Records one Session-level remark with its category as a log-only feedback/record event on a live Session through the Host unary Remote contract; the /feedback command shares the same producer.',
+  },
+  {
     key: 'workspaceRegistry',
     pkg: 'workspace',
     title: 'Workspace entity registry',
@@ -329,6 +336,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     implementations: ['session-query-sqlite'],
     consumers: ['session-reference', 'tool-session-query'],
     note: 'The interface supplies exact reads, filters, and traces; its concrete backend adds full-text reconciliation, ranking, snippets, and cursor generations, while the model consumer owns workspace authority and cursor-free rendering.',
+  },
+  {
+    key: 'memory',
+    pkg: 'experimental-memory',
+    title: 'Opt-in external memory seam',
+    mode: 'seam',
+    consumers: ['experimental-tool-memory'],
+    note: 'Resolves caller-owned workspace and preset scope, records bounded recall and capture lifecycle events, and keeps remote provider content behind the durable Session log.',
   },
   {
     key: 'fileReferences',
@@ -369,6 +384,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     mode: 'core',
     consumers: ['agent-loop', 'tool-ask-user', 'tool-bash', 'tool-cordis', 'tool-fs', 'tool-terminal', 'tool-skill', 'tool-subagent', 'tool-todo', 'tool-web'],
     note: 'Registers capabilities, owns PTC mode transport, and routes calls through pre-policy, monotonic guards, around dispatch, post-policy, and final-result observation.',
+  },
+  {
+    key: 'verifier',
+    pkg: 'experimental-verifier',
+    title: 'Opt-in pairwise verifier seam',
+    mode: 'seam',
+    consumers: ['experimental-tool-verifier'],
+    note: 'Runs one bounded JSON-schema comparison through the configured provider; the explicit tool remains a probabilistic aid rather than a correctness authority.',
   },
   {
     key: 'userQuestions',

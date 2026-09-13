@@ -46,6 +46,7 @@ import * as ToolBashPersistent from '@deepseek-ai/dsh-tool-bash-persistent'
 import * as ToolPwshPersistent from '@deepseek-ai/dsh-tool-pwsh-persistent'
 import CordisHostRunner from '@deepseek-ai/dsh-cordis-host-runner'
 import * as ToolCordis from '@deepseek-ai/dsh-tool-cordis'
+import * as ToolPresent from '@deepseek-ai/dsh-tool-present'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import * as ToolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
@@ -59,7 +60,12 @@ import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
 import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
 import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
+import MemoryService from '@deepseek-ai/dsh-experimental-memory'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
+import * as ToolMemory from '@deepseek-ai/dsh-experimental-tool-memory'
+import VerifierService from '@deepseek-ai/dsh-experimental-verifier'
+import * as ToolVerifier from '@deepseek-ai/dsh-experimental-tool-verifier'
+import { MemoryCredentials } from '../packages/credentials/credentials/tests/memory.ts'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import { registerListSubagentModels } from '../packages/subagent/tool-subagent/src/list-models.ts'
@@ -240,6 +246,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-present',
+    dir: 'tool-present',
+    source: 'packages/fs/tool-present/src/index.ts',
+    requires: ['ctx.tools', 'ctx.fs', 'ctx.sessionProjections'],
+    writes: ['tool/call', 'deliverables/presented after a successful final result', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(LocalFileSystem)
+      await ctx.plugin(ToolPresent)
+    },
+    note: 'Deliveries belong to the calling Session; Web ui-deliverables supplies source-file opening and cards.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-pwsh',
@@ -438,6 +456,36 @@ const TOOL_PACKAGES: ToolPackage[] = [
       })
       await ctx.plugin(ToolSkill)
     },
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-memory',
+    dir: 'tool-memory',
+    source: 'packages/experimental/tool-memory/src/index.ts',
+    requires: ['ctx.tools', 'ctx.memory', 'ctx.sessionQuery', 'a calling Agent for workspace authority'],
+    writes: ['tool/call', 'memory/search exact bounded citations', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(AgentRegistry)
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(SqliteSessionQueryEngine, { path: ':memory:' })
+      await ctx.plugin(MemoryService)
+      await ctx.plugin(ToolMemory)
+    },
+    note:
+      'Opt-in experimental retrieval over same-workspace session history. The tool records exact bounded citations in memory/search before returning its JSON result; TencentDB HTTP retrieval requires explicit endpoint, credential, service, and tenant-isolation configuration.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-verifier',
+    dir: 'tool-verifier',
+    source: 'packages/experimental/tool-verifier/src/index.ts',
+    requires: ['ctx.tools', 'ctx.verifier'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(MemoryCredentials, { MISTRAL_API_KEY: 'catalog-placeholder' })
+      await ctx.plugin(VerifierService, { baseUrl: 'https://verifier.invalid' })
+      await ctx.plugin(ToolVerifier)
+    },
+    note:
+      'Opt-in pairwise evidence comparison through the native JSON verifier. The score is probabilistic preference only and never a correctness proof or goal-completion authority.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-session-query',

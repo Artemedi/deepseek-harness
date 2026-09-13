@@ -143,9 +143,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'list\') async remoteExportList(): Promise<AgentPresetRoster>',
-        description: 'The roster off the Host: list projected to path-free rows, with the default marked and this deployment\'s authoring capability beside it.\n\nWhether a client can open a preset\'s directory is the Host\'s own opener capability, not a roster property — a caller needing both joins them.',
+        description: 'The roster off the Host: list projected to path-free rows, with the policy-effective default marked, this deployment\'s authoring capability, and its mode-selection policy beside it.\n\nWhether a client can open a preset\'s directory is the Host\'s own opener capability, not a roster property — a caller needing both joins them.',
         parameters: [],
-        returns: 'the rows and the authoring capability.',
+        returns: 'the rows, authoring capability, and effective selection policy.',
       },
       {
         signature: 'async compositionInventory(): Promise<AgentPresetComposition[]>',
@@ -1317,6 +1317,41 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'memory',
+    summary: 'Explicit local-memory service over the existing session-query corpus.',
+    description: 'Explicit local-memory service over the existing session-query corpus.',
+    methods: [
+      {
+        signature: 'resolve(agent: Agent, request: MemorySearchRequest): ResolvedMemorySearchSpec',
+        description: 'Resolve and validate one explicit memory search before provider execution.',
+        parameters: [{ name: 'agent', description: 'exact live caller whose session supplies the workspace scope.' }, { name: 'request', description: 'query, bounds, provider route, and cancellation.' }],
+        returns: 'immutable provider execution specification.',
+      },
+      {
+        signature: 'async search(agent: Agent, request: MemorySearchRequest): Promise<MemorySearchResult>',
+        description: 'Search same-workspace history using a resolved provider specification.',
+        parameters: [{ name: 'agent', description: 'exact live caller whose session supplies the workspace scope.' }, { name: 'request', description: 'query, bounds, provider route, and cancellation.' }],
+        returns: 'detached citations that a consumer must log before model use.',
+      },
+      {
+        signature: 'async capture(agent: Agent, request: MemoryCaptureRequest): Promise<void>',
+        description: 'Persist one completed conversation slice through an explicitly enabled provider.',
+        parameters: [{ name: 'agent', description: 'exact live Agent whose session and workspace own the slice.' }, { name: 'request', description: 'bounded messages, provider selection, and cancellation.' }],
+      },
+      {
+        signature: 'async captureCompletedTurns(agent: Agent, signal: AbortSignal): Promise<void>',
+        description: 'Export every completed, not-yet-successful turn in chronological order.',
+        parameters: [{ name: 'agent', description: 'exact live agent whose completed turns are captured.' }, { name: 'signal', description: 'cancellation for the maintenance pass and provider calls.' }],
+      },
+      {
+        signature: 'async recallForStep(agent: Agent, messages: readonly UserMessage[], signal: AbortSignal): Promise<UserMessage | undefined>',
+        description: 'Return logged, explicitly untrusted TencentDB context for one proposed first step.',
+        parameters: [{ name: 'agent', description: 'exact live agent receiving recalled context.' }, { name: 'messages', description: 'proposed first-step messages used to derive the direct-user query.' }, { name: 'signal', description: 'cancellation shared with the active agent turn.' }],
+        returns: 'a separate reference message, or `undefined` when recall has no usable result.',
+      },
+    ],
+  },
+  {
     key: 'messageFeedback',
     summary: 'Session-log service; cold operations never construct a Session or Agent.',
     description: 'Session-log service; cold operations never construct a Session or Agent.',
@@ -1494,6 +1529,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'true when the matching open operation is available.',
       },
       {
+        signature: 'workspaceDesktop(): { name: string; available: boolean; fileManager: \'finder\' | \'explorer\' | \'directory\' | null }',
+        description: 'Describe the serving desktop for authenticated file-action routes.',
+        parameters: [],
+        returns: 'Host name, configured availability, and platform-specific file-manager behavior.',
+      },
+      {
         signature: '@Remote(\'openWorkspacePath\') async openWorkspacePath( request: SessionOpenWorkspacePathRequest, signal: AbortSignal, ): Promise<SessionOpenWorkspacePathValue>',
         description: 'Open one path prepared by a Session-aware caller on the Host desktop.',
         parameters: [{ name: 'request', description: 'path after best-effort Session workspace resolution.' }, { name: 'signal', description: 'caller lifetime; abort terminates the native command.' }],
@@ -1553,6 +1594,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Stream a complete live-control baseline followed by replacement frames.',
         parameters: [{ name: 'signal', description: 'cancellation owned by the Remote stream carrier.' }],
         returns: 'one complete baseline followed by live replacement frames.',
+      },
+    ],
+  },
+  {
+    key: 'sessionFeedback',
+    summary: 'Host Remote through which a product surface records a Session-level remark.',
+    description: 'Host Remote through which a product surface records a Session-level remark.',
+    methods: [
+      {
+        signature: '@Remote(\'record\') record(request: SessionFeedbackRecordRequest): Promise<SessionFeedbackRecordResult>',
+        description: 'Record one remark on a live Session.',
+        parameters: [{ name: 'request', description: 'target Session plus the optional text and category.' }],
+        returns: 'the recorded postcondition, or `session-not-found` when no live Session carries the id.',
       },
     ],
   },
@@ -2351,7 +2405,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async start(name: string, request: SubagentStartRequest): Promise<SubagentRun>',
-        description: 'Establish a published child on the named provider. Capability and semantic checks run before delegation. Provider ownership lasts until its promise fulfills; a rejection therefore has no run for the caller to dispose and emits no run lifecycle events. Post-publication turn and infrastructure failures settle through the returned run.',
+        description: 'Establish a published child on the named provider. Capability and semantic checks run before delegation. Provider ownership lasts until its promise fulfills; a rejection therefore has no run for the caller to dispose and emits no run lifecycle events. Post-publication turn and infrastructure failures settle through the returned run. A catalog append failure disposes the run and handles its result rejection; the caller receives the catalog error even if disposal also fails.',
         parameters: [{ name: 'name', description: 'the provider to use.' }, { name: 'request', description: 'child label, prompt, parent, signal, and optional capabilities.' }],
         returns: 'the published holder-owned run.',
       },
@@ -2362,6 +2416,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'Abstract subprocess service.',
     description: 'Abstract subprocess service. Subclass, implement spawn, and load the subclass as a plugin — it registers as `ctx.subprocess` (one implementation per context; loading a second throws, which is cordis\' standard duplicate-service behavior).\n\nImplementations must honor these semantics:\n\n- Executable paths belong to one execution world shared with the mounted filesystem provider.\n- spawn returns a live handle synchronously. Target identity remains provider-private; `done` resolves with the spawned command\'s exit facts and may reject for spawn or provider failures.\n- Collect-mode readers are offset-based and non-consuming, so independent readers never consume one another\'s output; lossy reads report truncation and the spill file holding the complete stream when one exists. Piped streams are handed to the caller raw and never buffered here.\n- SubprocessHandle.terminate (and the spec\'s abort signal) starts the provider\'s documented procedure against its managed range. SubprocessHandle.waitForExit observes that same range so a consumer-owned teardown ladder can hold each tier on real quiescence; each provider documents its signalling and observability limits.\n- Disposal of the service terminates all still-running managed processes and awaits their exit.\n- spawnTerminal owns terminal allocation, text transport, foreground groups, signalling, and whole-session quiescence behind one awaited termination method; readiness and persistent-shell policy stay in the PTY consumer. Its output stream ends after queued terminal output when the top-level process exits.',
     methods: [
+      {
+        signature: 'readonly executionWorld: \'unspecified\' | \'local-host\' | \'remote\' = \'unspecified\'',
+        description: 'Execution-world classification for consumers that must remain on the DSH host.',
+        parameters: [],
+      },
       {
         signature: 'abstract resolveExecutable( command: string, env?: Readonly<Record<string, string>>, signal?: AbortSignal, ): Promise<string>',
         description: 'Resolve one configured executable in this provider\'s execution world. Absolute paths are verified; bare names use the provider\'s scrubbed PATH plus explicit environment overrides. Relative paths containing separators are rejected: the resolution base is undefined, so providers fail loud instead of guessing.',
@@ -2737,6 +2796,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'verifier',
+    summary: 'One opt-in explicit verifier provider.',
+    description: 'One opt-in explicit verifier provider.',
+    methods: [
+      {
+        signature: 'async compare(request: VerifierCompareRequest): Promise<VerifierCompareResult>',
+        description: 'Compare two bounded evidence records through the configured JSON-only provider.',
+        parameters: [{ name: 'request', description: 'Pairwise evidence and cancellation signal.' }],
+        returns: 'The validated provider preference.',
+      },
+    ],
+  },
+  {
     key: 'web',
     summary: 'The web access service.',
     description: 'The web access service. Registered as `ctx.web` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `WEB_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `WEB_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `WEB_PROVIDER_UNAVAILABLE`.',
@@ -2899,37 +2971,49 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'workspaceFiles',
-    summary: 'Host Remote service over the composed filesystem, confined to one workspace.',
-    description: 'Host Remote service over the composed filesystem, confined to one workspace.',
+    summary: 'Host Remote file reads and workspace directory observations over the composed filesystem.',
+    description: 'Host Remote file reads and workspace directory observations over the composed filesystem.',
     methods: [
       {
-        signature: '@Remote async read(agent: Agent, path: string, range: WorkspaceFileRange, signal: AbortSignal): Promise<WorkspaceFileText>',
-        description: 'Read one page of lines from a UTF-8 text file inside the Agent\'s workspace.',
-        parameters: [{ name: 'agent', description: 'target Agent resolved from the Session identity on the wire.' }, { name: 'path', description: 'workspace path, absolute or relative to the workspace root.' }, { name: 'range', description: 'the line window; omitted fields take the page defaults.' }, { name: 'signal', description: 'caller cancellation.' }],
+        signature: '@Remote async read( workspaceFileScope: WorkspaceFileScope, path: string, range: WorkspaceFileRange, signal: AbortSignal, ): Promise<WorkspaceFileText>',
+        description: 'Read one page of lines from a UTF-8 file readable by the filesystem backend.',
+        parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'path', description: 'absolute path or path relative to the workspace root; files outside it are allowed.' }, { name: 'range', description: 'the line window; omitted fields take the page defaults.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'the page, the file\'s version at the stat before it, and whether it reaches the last line.',
       },
       {
-        signature: '@Remote async readBytes(agent: Agent, path: string, range: WorkspaceByteRange, signal: AbortSignal): Promise<WorkspaceFileBytes>',
-        description: 'Read one byte window of a regular file inside the Agent\'s workspace: raw bytes, no text decoding and no binary rejection.',
-        parameters: [{ name: 'agent', description: 'target Agent resolved from the Session identity on the wire.' }, { name: 'path', description: 'workspace path, absolute or relative to the workspace root.' }, { name: 'range', description: 'the byte window; omitted fields take the window defaults.' }, { name: 'signal', description: 'caller cancellation.' }],
+        signature: '@Remote async readBytes( workspaceFileScope: WorkspaceFileScope, path: string, range: WorkspaceByteRange, signal: AbortSignal, ): Promise<WorkspaceFileBytes>',
+        description: 'Read one byte window of a regular file readable by the filesystem backend: raw bytes, no text decoding and no binary rejection.',
+        parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'path', description: 'absolute path or path relative to the workspace root; files outside it are allowed.' }, { name: 'range', description: 'the byte window; omitted fields take the window defaults.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'the window in base64, the file\'s version and size at the stat before it, and whether it reaches the last byte.',
       },
       {
-        signature: '@Remote async stat(agent: Agent, path: string, signal: AbortSignal): Promise<WorkspaceFileStat>',
+        signature: '@Remote async readAll(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<WorkspaceFileBytes>',
+        description: 'Read a complete regular file as bytes, subject to the configured full-file cap.',
+        parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'path', description: 'absolute or workspace-relative file path.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'one complete base64 window with offset zero and eof true; oversized files fail with too-large.',
+      },
+      {
+        signature: '@Remote async readRelated( workspaceFileScope: WorkspaceFileScope, path: string, relativePath: string, signal: AbortSignal, ): Promise<WorkspaceFileBytes>',
+        description: 'Read a complete file relative to another file\'s directory, including outside the workspace.',
+        parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'path', description: 'base file, absolute or workspace-relative.' }, { name: 'relativePath', description: 'relative filesystem path, not a URL or absolute path.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the complete related file using the ordinary file-size and access checks.',
+      },
+      {
+        signature: '@Remote async stat(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<WorkspaceFileStat>',
         description: 'Report one regular file\'s identity, version, and size without its content.',
-        parameters: [{ name: 'agent', description: 'target Agent resolved from the Session identity on the wire.' }, { name: 'path', description: 'workspace path, absolute or relative to the workspace root.' }, { name: 'signal', description: 'caller cancellation.' }],
+        parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'path', description: 'absolute path or path relative to the workspace root; files outside it are allowed.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'the file\'s absolute path, current version, and byte size.',
       },
       {
-        signature: '@Remote async list(agent: Agent, path: string, signal: AbortSignal): Promise<WorkspaceDirectoryListing>',
-        description: 'List the direct children of one directory inside the Agent\'s workspace.',
-        parameters: [{ name: 'agent', description: 'target Agent resolved from the Session identity on the wire.' }, { name: 'path', description: 'workspace path, absolute or relative to the workspace root.' }, { name: 'signal', description: 'caller cancellation.' }],
+        signature: '@Remote async list(workspaceFileScope: WorkspaceFileScope, path: string, signal: AbortSignal): Promise<WorkspaceDirectoryListing>',
+        description: 'List the direct children of one directory inside the Session\'s workspace.',
+        parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'path', description: 'workspace path, absolute or relative to the workspace root.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'the directory\'s children in the backend\'s stable name order, bounded by the entry cap.',
       },
       {
-        signature: '@Remote({ mode: \'stream\' }) changes(agent: Agent, signal: AbortSignal): AsyncIterable<WorkspaceFileWatchFrame>',
-        description: 'Stream every `fs/observed` observation of a file inside the Agent\'s workspace. Only Agent filesystem operations report here; the OS is not watched.',
-        parameters: [{ name: 'agent', description: 'target Agent resolved from the Session identity on the wire.' }, { name: 'signal', description: 'generation cancellation.' }],
+        signature: '@Remote({ mode: \'stream\' }) changes(workspaceFileScope: WorkspaceFileScope, signal: AbortSignal): AsyncIterable<WorkspaceFileWatchFrame>',
+        description: 'Stream every `fs/observed` observation of a file inside the Session\'s workspace. Only instrumented filesystem operations report here; the OS is not watched.',
+        parameters: [{ name: 'workspaceFileScope', description: 'header-derived workspace root for the Session identity on the wire.' }, { name: 'signal', description: 'generation cancellation.' }],
         returns: '`ready` once the Host observation queue is active and the workspace root is resolved, then queued and live observations in emission order.',
       },
     ],
@@ -3585,7 +3669,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentPresetRoster',
-    declaration: 'export interface AgentPresetRoster {\n    readonly presets: readonly AgentPresetRow[];\n    readonly authorable: boolean;\n}',
+    declaration: 'export interface AgentPresetRoster {\n    readonly presets: readonly AgentPresetRow[];\n    readonly authorable: boolean;\n    readonly modeSelectionEnabled: boolean;\n}',
   },
   {
     name: 'AgentPresetRow',
@@ -3817,11 +3901,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CommandDefinition',
-    declaration: 'export interface CommandDefinition {\n    readonly name: string;\n    readonly description: string;\n    readonly input?: CommandInputDescriptor;\n    readonly recordInput?: boolean;\n    readonly handler: (invocation: CommandInvocation) => CommandResult | Promise<CommandResult>;\n}',
+    declaration: 'export interface CommandDefinition {\n    readonly definitionId?: CommandDefinitionId;\n    readonly name: string;\n    readonly description: string;\n    readonly input?: CommandInputDescriptor;\n    readonly recordInput?: boolean;\n    readonly handler: (invocation: CommandInvocation) => CommandResult | Promise<CommandResult>;\n}',
+  },
+  {
+    name: 'CommandDefinitionId',
+    declaration: 'export type CommandDefinitionId = Branded<\'CommandDefinitionId\'>;',
   },
   {
     name: 'CommandDescriptor',
-    declaration: 'export interface CommandDescriptor {\n    readonly name: string;\n    readonly description: string;\n    readonly input?: CommandInputDescriptor;\n}',
+    declaration: 'export interface CommandDescriptor {\n    readonly definitionId?: CommandDefinitionId;\n    readonly name: string;\n    readonly description: string;\n    readonly input?: CommandInputDescriptor;\n}',
   },
   {
     name: 'CommandExecution',
@@ -4168,6 +4256,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    tools?: ToolSchema[];\n}',
   },
   {
+    name: 'FeedbackCategory',
+    declaration: 'export type FeedbackCategory = \'task-result\' | \'instruction-following\' | \'product-interaction\' | \'service-stability\' | \'resource-cost\' | \'security-privacy-permission\' | \'other\';',
+  },
+  {
     name: 'FiberState',
     declaration: 'export type FiberState = FiberStateEnum;',
   },
@@ -4477,7 +4569,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmConfigurableProvider',
-    declaration: 'export interface LlmConfigurableProvider {\n    provider: string;\n    displayName: string;\n    settingsNs: string;\n    settingsPath: readonly string[];\n    declared?: boolean;\n}',
+    declaration: 'export interface LlmConfigurableProvider {\n    provider: string;\n    displayName: string;\n    settingsNs: string;\n    settingsPath: readonly string[];\n    declared?: boolean;\n    error?: string;\n}',
   },
   {
     name: 'LlmDiscoveredModel',
@@ -4572,6 +4664,46 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
   },
   {
+    name: 'MemoryCaptureMessage',
+    declaration: 'export interface MemoryCaptureMessage {\n    readonly role: \'user\' | \'assistant\';\n    readonly content: string;\n}',
+  },
+  {
+    name: 'MemoryCaptureRequest',
+    declaration: 'export interface MemoryCaptureRequest {\n    readonly messages: readonly MemoryCaptureMessage[];\n    readonly provider?: \'tencentdb\';\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'MemoryDepth',
+    declaration: 'export type MemoryDepth = \'L0\' | \'L1\' | \'L2\' | \'L3\';',
+  },
+  {
+    name: 'MemoryHit',
+    declaration: 'export interface MemoryHit {\n    readonly id: MemoryId;\n    readonly sessionId?: SessionId;\n    readonly seq?: number;\n    readonly eventType?: string;\n    readonly kind?: \'memory\' | \'skill\' | \'wiki\' | \'code-graph\' | \'resource\';\n    readonly title?: string;\n    readonly source?: string;\n    readonly content: string;\n}',
+  },
+  {
+    name: 'MemoryId',
+    declaration: 'export type MemoryId = Branded<\'MemoryId\'>;',
+  },
+  {
+    name: 'MemoryProvider',
+    declaration: 'export interface MemoryProvider {\n    readonly id: string;\n    search(request: MemoryProviderSearchRequest): Promise<readonly MemoryHit[]>;\n    capture?(request: MemoryProviderCaptureRequest): Promise<void>;\n}',
+  },
+  {
+    name: 'MemoryProviderCaptureRequest',
+    declaration: 'export interface MemoryProviderCaptureRequest extends MemoryCaptureRequest {\n    readonly sessionId: SessionId;\n    readonly workspace: string;\n    readonly agentPreset?: string;\n}',
+  },
+  {
+    name: 'MemoryProviderSearchRequest',
+    declaration: 'export interface MemoryProviderSearchRequest {\n    readonly workspace: string;\n    readonly agentPreset?: string;\n    readonly query: string;\n    readonly limit: number;\n    readonly maxContentBytes: number;\n    readonly depth?: MemoryDepth;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'MemorySearchRequest',
+    declaration: 'export interface MemorySearchRequest {\n    readonly query: string;\n    readonly limit?: number;\n    readonly maxContentBytes?: number;\n    readonly provider?: \'local\' | \'tencentdb\' | \'openviking\';\n    readonly depth?: MemoryDepth;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'MemorySearchResult',
+    declaration: 'export interface MemorySearchResult {\n    readonly provider: string;\n    readonly workspace: string;\n    readonly hits: readonly MemoryHit[];\n}',
+  },
+  {
     name: 'Message',
     declaration: 'export interface Message {\n    readonly id: MessageId;\n    readonly role: \'system\' | \'user\' | \'assistant\';\n    readonly content: ContentBlock[];\n    readonly source: MessageSource;\n}',
   },
@@ -4593,7 +4725,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'MessageFeedbackItem',
-    declaration: 'export interface MessageFeedbackItem {\n    readonly messageId: MessageId;\n    readonly rating: MessageFeedbackRating;\n    readonly note?: string;\n    readonly version: MessageFeedbackVersion;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n}',
+    declaration: 'export interface MessageFeedbackItem {\n    readonly messageId: MessageId;\n    readonly rating: MessageFeedbackRating;\n    readonly note?: string;\n    readonly category?: FeedbackCategory;\n    readonly version: MessageFeedbackVersion;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n}',
   },
   {
     name: 'MessageFeedbackListRequest',
@@ -4617,7 +4749,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'MessageFeedbackPutRequest',
-    declaration: 'export interface MessageFeedbackPutRequest {\n    readonly sessionId: SessionId;\n    readonly messageId: MessageId;\n    readonly rating: MessageFeedbackRating;\n    readonly note?: string;\n    readonly ifVersion: MessageFeedbackVersion | null;\n}',
+    declaration: 'export interface MessageFeedbackPutRequest {\n    readonly sessionId: SessionId;\n    readonly messageId: MessageId;\n    readonly rating: MessageFeedbackRating;\n    readonly note?: string;\n    readonly category?: FeedbackCategory;\n    readonly ifVersion: MessageFeedbackVersion | null;\n}',
   },
   {
     name: 'MessageFeedbackPutResult',
@@ -4892,6 +5024,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ResolvedCredential {\n    value: string;\n    source: string;\n}',
   },
   {
+    name: 'ResolvedMemorySearchSpec',
+    declaration: 'export interface ResolvedMemorySearchSpec {\n    readonly provider: MemoryProvider;\n    readonly workspace: string;\n    readonly query: string;\n    readonly limit: number;\n    readonly maxContentBytes: number;\n    readonly depth?: MemoryDepth;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
     name: 'ResolvedNormalRetryPolicy',
     declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n}',
   },
@@ -5128,6 +5264,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionEventWindow {\n    session: SessionHeader;\n    inheritedEventCount: SessionLogOffset;\n    target: SessionEvent;\n    events: SessionEvent[];\n    startSeq: SessionSeq;\n    endSeq: SessionSeq;\n}',
   },
   {
+    name: 'SessionFeedbackRecordRequest',
+    declaration: 'export interface SessionFeedbackRecordRequest {\n    readonly sessionId: SessionId;\n    readonly text?: string;\n    readonly category?: FeedbackCategory;\n}',
+  },
+  {
+    name: 'SessionFeedbackRecordResult',
+    declaration: 'export type SessionFeedbackRecordResult = {\n    readonly ok: true;\n    readonly value: SessionFeedbackRecordValue;\n} | {\n    readonly ok: false;\n    readonly error: SessionFeedbackSessionNotFound;\n};',
+  },
+  {
+    name: 'SessionFeedbackRecordValue',
+    declaration: 'export interface SessionFeedbackRecordValue {\n    readonly recorded: true;\n}',
+  },
+  {
+    name: 'SessionFeedbackSessionNotFound',
+    declaration: 'export interface SessionFeedbackSessionNotFound {\n    readonly code: \'session-not-found\';\n    readonly sessionId: SessionId;\n}',
+  },
+  {
     name: 'SessionFollowFrame',
     declaration: 'export type SessionFollowFrame = {\n    readonly type: \'snapshot\';\n    readonly header: SessionWireHeader;\n    readonly cursor: number;\n    readonly records: readonly SessionHistoryRecord[];\n    readonly hasMore: boolean;\n    readonly projections: SessionProjectionBaseline;\n    readonly assistantStream?: SessionAssistantStreamBaseline;\n} | SessionEventEntry | {\n    readonly type: \'assistant-stream\';\n    readonly frame: SessionAssistantStreamFrame;\n};',
   },
@@ -5221,7 +5373,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionOpenWorkspacePathRequest',
-    declaration: 'export interface SessionOpenWorkspacePathRequest {\n    readonly path: string;\n}',
+    declaration: 'export interface SessionOpenWorkspacePathRequest {\n    readonly action?: \'reveal\';\n    readonly path: string;\n}',
   },
   {
     name: 'SessionOpenWorkspacePathValue',
@@ -5553,7 +5705,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillCandidate',
-    declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly path?: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
+    declaration: 'export interface SkillCandidate extends SkillSummary {\n    readonly rank: number;\n    readonly locator: unknown;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
   {
     name: 'SkillCatalogSnapshot',
@@ -5561,11 +5713,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillDefinition',
-    declaration: 'export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly path?: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
+    declaration: 'export interface SkillDefinition extends SkillSummary {\n    readonly content: string;\n    readonly metadata?: Readonly<Record<string, unknown>>;\n}',
   },
   {
     name: 'SkillEntry',
-    declaration: 'export interface SkillEntry {\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
+    declaration: 'export interface SkillEntry {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly modelInvocable: boolean;\n}',
   },
   {
     name: 'SkillInvocationPolicy',
@@ -5609,7 +5761,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillSummary',
-    declaration: 'export interface SkillSummary {\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly invocation: SkillInvocationPolicy;\n    readonly source: SkillSource;\n    readonly provider: string;\n    readonly resourceBase?: SkillResourceBase;\n}',
+    declaration: 'export interface SkillSummary {\n    readonly path?: string;\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly invocation: SkillInvocationPolicy;\n    readonly source: SkillSource;\n    readonly provider: string;\n    readonly resourceBase?: SkillResourceBase;\n}',
   },
   {
     name: 'SkillViewOptions',
@@ -6200,6 +6352,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface VerifiedWebhookDelivery<K extends string = string> {\n    readonly kind: K;\n    readonly source: WebhookSourceId;\n    readonly deliveryId: WebhookDeliveryId;\n    readonly event: WebhookEventOf<K>;\n    readonly receivedAt: number;\n}',
   },
   {
+    name: 'VerifierCandidate',
+    declaration: 'export interface VerifierCandidate {\n    readonly id: string;\n    readonly evidence: string;\n}',
+  },
+  {
+    name: 'VerifierCompareRequest',
+    declaration: 'export interface VerifierCompareRequest {\n    readonly rubric: string;\n    readonly left: VerifierCandidate;\n    readonly right: VerifierCandidate;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'VerifierCompareResult',
+    declaration: 'export interface VerifierCompareResult {\n    readonly schemaVersion: \'score-v1\';\n    readonly probabilityLeft: number;\n    readonly rationale: string;\n}',
+  },
+  {
     name: 'WebBootBatch',
     declaration: 'export interface WebBootBatch {\n    phase: WebBootBatchPhase;\n    url: string;\n    rev: string;\n    entries: string[];\n}',
   },
@@ -6410,6 +6574,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceFileRange',
     declaration: 'export interface WorkspaceFileRange {\n    readonly offset?: number;\n    readonly limit?: number;\n}',
+  },
+  {
+    name: 'WorkspaceFileScope',
+    declaration: 'export interface WorkspaceFileScope {\n    readonly sessionId: SessionId;\n    readonly workspaceRoot: string;\n}',
   },
   {
     name: 'WorkspaceFileStat',

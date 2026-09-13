@@ -32,6 +32,10 @@ env:
 
 jobs:
   preview:
+    # The Cloudflare project and Access policy belong to the upstream
+    # repository. Forks still exercise the same web build through CI without
+    # repository's infrastructure.
+    if: ${{ github.repository == 'deepseek-harness/deepseek-harness' }}
     runs-on: ubuntu-24.04
     name: cloudflare pages preview
     steps:

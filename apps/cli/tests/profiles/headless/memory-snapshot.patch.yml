@@ -1,0 +1,38 @@
+# Keyless patch for the opt-in experimental memory tool.
+- id: headless-startup
+  disabled: true
+
+- id: headless-runner
+  disabled: true
+
+- id: llm-deepseek
+  disabled: true
+
+- id: session-query-sqlite
+  disabled: true
+
+- id: session-title-llm
+  disabled: true
+
+- id: agent-loop
+  config:
+    agents:
+      - id: main
+        provider: memory-mock
+        model: memory-mock
+        cwd: !!js process.cwd()
+
+- id: session-persistence-jsonl
+  config:
+    root: './.sessions'
+    compression: none
+
+- insert:
+    - id: memory-query
+      name: './tests/fixtures/memory-query.ts'
+    - id: memory-mock-llm
+      name: './tests/fixtures/memory-mock-llm.ts'
+    - id: memory-service
+      name: '@deepseek-ai/dsh-experimental-memory'
+    - id: memory-tool
+      name: '@deepseek-ai/dsh-experimental-tool-memory'

@@ -573,6 +573,24 @@ Types: [ScopeKey](scope.md)
 
 Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 
+<a id="ctxverifier--verifierservice"></a>
+
+### `ctx.verifier` — `VerifierService`
+
+One opt-in explicit verifier provider.
+
+```ts cordis-catalog
+/**
+ * Compare two bounded evidence records through the configured JSON-only provider.
+ *
+ * @param request - Pairwise evidence and cancellation signal.
+ * @returns The validated provider preference.
+ */
+async compare(request: VerifierCompareRequest): Promise<VerifierCompareResult>
+```
+
+Source: [`packages/experimental/verifier/src/index.ts`](../../packages/experimental/verifier/src/index.ts)
+
 <a id="tools-events"></a>
 
 ### `tools/*` events

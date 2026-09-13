@@ -1,0 +1,40 @@
+# Opt-in native TencentDB Agent Memory retrieval for an existing DSH profile.
+# The loopback standalone Gateway does not require a bearer secret; DSH sends
+# the non-secret Bearer shape required by the upstream v3 parser.
+# For a protected or non-loopback Gateway, configure credentialRef and set the
+# same secret as its TDAI_GATEWAY_API_KEY through DSH credentials.
+- insert:
+    - id: tencentdb-memory-service
+      name: '@deepseek-ai/dsh-experimental-memory'
+      config:
+        providers: [local, tencentdb]
+        automaticCapture: true
+        automaticRecall: true
+        # Default is [L1]. Add L2/L3 only when the upstream pipelines produce
+        # scenario and core profiles; all layers share one result/byte budget.
+        automaticRecallDepths: [L1, L2, L3]
+        tencentdb:
+          baseUrl: http://127.0.0.1:8420
+          # credentialRef: TDAI_MEMORY_API_KEY
+          serviceId: default
+          # Every DSH workspace/effective preset needs its own provisioned
+          # TencentDB Team/Agent profile. Omit agentPreset only for sessions
+          # composed without the agent-presets service.
+          isolationBindings:
+            - workspace: /absolute/path/to/project
+              agentPreset: standard
+              teamId: default
+              agentId: default
+              userId: default
+        # Managed mode starts an already installed, commit-pinned MemoryCore
+        # checkout and stops it with this DSH composition. Replace both paths.
+        tencentdbRuntime:
+          command: node
+          args: [--import, tsx, src/gateway/server.ts]
+          cwd: /absolute/path/to/TencentDB-Agent-Memory/MemoryCore
+          dataDir: /absolute/path/to/local/tdai-memory
+          llmCredentialRef: DEEPSEEK_API_KEY
+          llmBaseUrl: https://api.deepseek.com/v1
+          llmModel: deepseek-chat
+    - id: tencentdb-memory-tool
+      name: '@deepseek-ai/dsh-experimental-tool-memory'
