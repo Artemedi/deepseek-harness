@@ -1,49 +1,101 @@
-# Experimental Verifier Bundle
+---
+description: "Add the experimental verifier service and explicit verify_pair tool to a selected dsh profile from a source checkout."
+kind: "package-bundle"
+---
+
+# @deepseek-ai/dsh-experimental-verifier-bundle
 
 English | [中文](README.zh.md)
 
-`@deepseek-ai/dsh-experimental-verifier-bundle` is a private opt-in DSH profile bundle. It installs the experimental verifier service and explicit `verify_pair` tool into the selected profile. It is not part of the base, headless, or Web bundles.
+## Summary
 
-## Installation
+This opt-in layer adds the experimental JSON verifier service and `verify_pair` tool to one selected profile. No shipped base, headless, or Web profile includes it. Install or remove it through the profile package manager so dependency resolution and patch reconciliation stay profile-local. The package is private and intended for built source checkouts; its score remains probabilistic evidence rather than correctness authority.
 
-From a source checkout that has built this bundle, install it through the profile package manager:
+## Table of Contents
 
-```sh
-PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" pnpm dsh plugin --profile web add ./packages/bundle/experimental-verifier
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+### Install into a profile
+
+From a built source checkout, install the local package into the selected profile and remove it by package name:
+
+```text
+pnpm dsh plugin --profile web add ./packages/bundle/experimental-verifier
+pnpm dsh plugin --profile web remove @deepseek-ai/dsh-experimental-verifier-bundle
 ```
 
-The profile-local dependency graph makes the two private experimental packages resolvable by `dsh-web.service`. Do not copy the bundle patch rows into a profile `cordis.patch.yml` directly.
+The profile-local dependency graph makes both private experimental packages resolvable, and reconciliation activates the declared `dsh.bundle.patch`. A package without that declaration can be installed as a dependency but contributes no layer. Do not copy these rows directly into the profile patch.
 
-Verify before restart:
+### What you get
 
-```sh
-PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" pnpm dsh --profile web --dump-config
-```
+The layer inserts `experimental-verifier`, configured for the bounded Mistral-compatible route and `MISTRAL_API_KEY`, followed by `experimental-tool-verifier`. The service owns provider requests and response validation; the tool owns the model-facing schema and compact result.
 
-Remove the bundle through the same interface:
+-----
 
-```sh
-PATH="/home/linuxbrew/.linuxbrew/bin:$PATH" pnpm dsh plugin --profile web remove @deepseek-ai/dsh-experimental-verifier-bundle
-```
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+The package is a static two-row patch carrier. Profile reconciliation applies [`cordis.patch.yml`](cordis.patch.yml); later profile or user rows with the same ids replace these complete configurations. The TypeScript entry has no runtime behavior, and each inserted package owns its service, tool, and invariants.
+
+| File | Role |
+|---|---|
+| [`cordis.patch.yml`](cordis.patch.yml) | Verifier service and tool rows with bounded defaults |
+| [`src/index.ts`](src/index.ts) | Empty bundle entry |
+| [`src/invariant.ts`](src/invariant.ts) | Static bundle composition invariant |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+- [Verifier service](../../experimental/verifier/README.md) — provider and validation contract.
+- [Verifier tool](../../experimental/tool-verifier/README.md) — model-facing schema and boundary.
+- [Bundle package map](../README.md) — shipped and optional profile layers.
+- [Generated composition graph](../../../apps/cli/composition.md) — current profile rows.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
-### Indirect verifier tool
-
-#### What the model sees
-
-This bundle adds the `verify_pair` tool only through its verifier dependency. The service and tool package READMEs define its schema and result.
-
-#### Token effect
-
-The bundle adds no request itself. Each explicit `verify_pair` call makes one bounded external verifier request.
+Indirectly, through the inserted verifier tool; that package owns its model-facing schema and result.
 
 #### KV Cache effect
 
-The bundle adds no prompt section or durable context. The normal tool call and result records remain the replay source.
+The bundle itself adds no request prefix. The inserted tool definition is stable while the profile composition is unchanged.
 
 ## Known Limitations and Deferred Work
 
-- **Private source bundle** — it is intended for a source checkout and is not published as a release package.
-- **No automatic verification** — the bundle exposes only explicit `verify_pair`; it does not change agent-loop or goal behavior.
+<a id="known-limitations-and-deferred-work"></a>
+
+These constraints follow from the bundle's private, opt-in status.
+
+- **Source checkout only** — the private package is not published as a release dependency.
+- **Whole-row overrides** — later patches replace a row's complete configuration rather than merging individual fields.
+- **No automatic verification** — the layer exposes only explicit `verify_pair` calls.
 - **No correctness authority** — deterministic evidence and human review remain required.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

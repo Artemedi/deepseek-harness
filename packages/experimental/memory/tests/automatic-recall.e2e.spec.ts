@@ -6,9 +6,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 
-const driver = fileURLToPath(new URL('../../../../examples/headless-agent/tests/fixtures/headless-driver.ts', import.meta.url))
+const driver = fileURLToPath(new URL(
+  '../../../../packages/test-support/loader-smoke/tests/fixtures/headless-driver.ts', import.meta.url,
+))
 const configPath = fileURLToPath(new URL(
-  '../../../../examples/headless-agent/tests/fixtures/memory-automatic-recall.cordis.yml', import.meta.url,
+  '../../../../apps/cli/tests/profiles/headless/memory-automatic-recall.patch.yml', import.meta.url,
 ))
 const repoTsconfig = fileURLToPath(new URL('../../../../tsconfig.json', import.meta.url))
 
@@ -74,7 +76,8 @@ describe('automatic TencentDB recall through a real headless AgentLoop', () => {
     const projection: unknown[] = events.flatMap<unknown>((event) => {
       if (event.type === 'memory/search') return [{ type: event.type, data: { ...event.data, workspace: '<workspace>' } }]
       if (event.type === 'step/start' || event.type === 'request/context') return [{ type: event.type }]
-      if (event.type === 'user/message' && event.data.source.kind === 'plugin') {
+      if (event.type === 'user/message' && event.data.source.kind === 'plugin'
+        && event.data.source.plugin === 'experimental-memory') {
         return [{ type: event.type, source: event.data.source, text: event.data.content }]
       }
       return []

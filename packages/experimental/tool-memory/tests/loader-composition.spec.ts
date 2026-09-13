@@ -6,10 +6,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
+import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { CallId } from '@deepseek-ai/dsh-llm'
-import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import { createInboxStub } from '@deepseek-ai/dsh-agent-loop-testkit'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import SessionStore, { Session, SessionId, SessionSeq, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -24,7 +26,7 @@ class TestQuery extends SessionQueryEngine {
 
   override async filterSessions(): Promise<SessionRecord[]> {
     return [{
-      header: { version: SESSION_FORMAT_VERSION, id: SessionId('prior'), createdAt: 1, cwd: '/workspace/a' },
+      header: { version: SESSION_FORMAT_VERSION, id: SessionId('prior'), createdAt: 1, cwd: '/workspace/a', isSeeded: false },
       live: false,
       persisted: true,
     }]
@@ -32,7 +34,7 @@ class TestQuery extends SessionQueryEngine {
 
   override async filterEvents(): Promise<SessionEventSearchDocument[]> {
     return [{
-      sessionId: SessionId('prior'), seq: 4, type: 'user/message', time: 1,
+      sessionId: SessionId('prior'), seq: SessionSeq(4), type: 'user/message', time: 1,
       surface: 'current', text: 'gateway retry guidance',
     }]
   }
@@ -51,9 +53,9 @@ afterEach(async () => {
 function agent(ctx: Context): Agent {
   const scope = ctx.plugin(() => {})
   const session = Session.create(SessionId('memory-loader-agent'), [], {
-    version: SESSION_FORMAT_VERSION, id: SessionId('memory-loader-agent'), createdAt: 1, cwd: '/workspace/a',
+    version: SESSION_FORMAT_VERSION, id: SessionId('memory-loader-agent'), createdAt: 1, cwd: '/workspace/a', isSeeded: false,
   })
-  const inbox = new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} })
+  const inbox = createInboxStub()
   const value: Agent = {
     id: session.id, options: {}, session, inbox, ctx: scope.ctx, status: 'idle',
     followup: () => {}, steer: () => {}, inject: () => {}, send: () => {}, cancel() {},
@@ -68,6 +70,7 @@ async function boot(): Promise<Context> {
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
     "- name: '@deepseek-ai/dsh-session'",
+    "- name: '@deepseek-ai/dsh-session-projection'",
     "- name: '@deepseek-ai/dsh-agent'",
     "- name: '@deepseek-ai/dsh-system-prompt'",
     "- name: 'test-query'",
@@ -86,6 +89,7 @@ async function boot(): Promise<Context> {
   ctx.loader.builtins.include = Include
   const modules = new Map<string, unknown>([
     ['@deepseek-ai/dsh-session', SessionStore],
+    ['@deepseek-ai/dsh-session-projection', SessionProjectionRegistry],
     ['@deepseek-ai/dsh-agent', AgentRegistry],
     ['@deepseek-ai/dsh-system-prompt', SystemPrompt],
     ['test-query', TestQuery],
@@ -112,7 +116,7 @@ describe('experimental memory real Loader composition', () => {
     const owner = agent(ctx)
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('memory-search'),
+      callId: ToolCallId('memory-search'),
       name: 'memory_search',
       arguments: { query: 'retry', limit: 1 },
       agent: owner,
@@ -126,21 +130,25 @@ describe('experimental memory real Loader composition', () => {
         }],
       }),
     }])
-    expect(owner.session.events.findLast(event => event.type === 'memory/search')?.data).toEqual({
+    expect(owner.session.snapshotEvents().findLast(event => event.type === 'memory/search')?.data).toEqual({
       version: 1, provider: 'local-session-query', workspace: '/workspace/a', query: 'retry', hits: [{
         id: 'local:prior:4', sessionId: 'prior', seq: 4, eventType: 'user/message', content: 'gateway retry guidance',
       }],
     })
 
-    const viking = await ctx.tools.execute({ signal: new AbortController().signal, callId: CallId('memory-viking'), name: 'memory_search', arguments: { provider: 'openviking', depth: 'L1', query: 'retry' }, agent: owner })
+    const viking = await ctx.tools.execute({ signal: new AbortController().signal, callId: ToolCallId('memory-viking'), name: 'memory_search', arguments: { provider: 'openviking', depth: 'L1', query: 'retry' }, agent: owner })
     expect(viking.isError).toBe(false)
     expect(viking.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('openviking:viking://stub/retry') })
-    expect(owner.session.events.filter(event => event.type === 'memory/search')).toHaveLength(2)
-    const memoryEvent = owner.session.events.find(event => event.type === 'memory/search')
+    expect(owner.session.snapshotEvents().filter(event => event.type === 'memory/search')).toHaveLength(2)
+    const memoryEvent = owner.session.snapshotEvents().find(event => event.type === 'memory/search')
     expect(memoryEvent).toBeDefined()
-    await ctx.sessionPersistence.create(owner.session.header)
-    await ctx.sessionPersistence.append(owner.session.id, owner.session.events)
-    const loaded = await ctx.sessionPersistence.load(owner.session.id)
+    const writer = await ctx.sessionPersistence.create(owner.session.header)
+    await writer.append(owner.session.snapshotEvents())
+    await writer.flush()
+    await writer.close()
+    const reader = await ctx.sessionPersistence.open(owner.session.id, 'read')
+    const loaded = await reader.read()
+    await reader.close()
     expect(loaded.events.find(event => event.type === 'memory/search')?.data).toEqual(memoryEvent!.data)
     expect(loaded.events.filter(event => event.type === 'memory/search')).toHaveLength(2)
   }, 30_000)

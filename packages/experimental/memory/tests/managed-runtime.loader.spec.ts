@@ -9,6 +9,7 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import SessionStore from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import MemoryService from '@deepseek-ai/dsh-experimental-memory'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
@@ -49,6 +50,7 @@ describe('managed TencentDB MemoryCore real Loader composition', () => {
     const configPath = join(root, 'cordis.yml')
     await writeFile(configPath, [
       "- name: '@deepseek-ai/dsh-session'",
+      "- name: '@deepseek-ai/dsh-session-projection'",
       "- name: '@deepseek-ai/dsh-agent'",
       "- name: 'test-query'",
       "- name: '@deepseek-ai/dsh-experimental-memory'",
@@ -85,6 +87,7 @@ describe('managed TencentDB MemoryCore real Loader composition', () => {
     ctx.loader.builtins.include = Include
     const modules = new Map<string, unknown>([
       ['@deepseek-ai/dsh-session', SessionStore],
+      ['@deepseek-ai/dsh-session-projection', SessionProjectionRegistry],
       ['@deepseek-ai/dsh-agent', AgentRegistry],
       ['test-query', EmptyQuery],
       ['test-credentials', MemoryCredentials],

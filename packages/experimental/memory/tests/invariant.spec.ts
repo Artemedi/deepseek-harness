@@ -33,7 +33,7 @@ describe('memory event invariant', () => {
       query: 'retry',
       hits: [],
     })).not.toThrow()
-    expect(owner.events.at(-1)?.type).toBe('memory/search')
+    expect(owner.snapshotEvents().at(-1)?.type).toBe('memory/search')
     await ctx.fiber.dispose()
   })
 
@@ -50,7 +50,7 @@ describe('memory event invariant', () => {
       code: 'INVARIANT',
       packageName: '@deepseek-ai/dsh-experimental-memory',
     }))
-    expect(owner.events).toEqual([])
+    expect(owner.snapshotEvents()).toEqual([])
     await ctx.fiber.dispose()
   })
 })

@@ -1,39 +1,138 @@
-# Experimental Memory Service
+---
+description: "配置经 workspace 授权的 session memory、TencentDB capture 与 recall、OpenViking retrieval，或受管的本地 MemoryCore Gateway。"
+kind: "package-reference"
+---
+
+# @deepseek-ai/dsh-experimental-memory
 
 [English](README.md) | 中文
 
-`@deepseek-ai/dsh-experimental-memory` 在 DSH session-query corpus 上提供显式、经 workspace 授权的检索。
+## 概述
 
-该 service 接受精确的 live `Agent`，从 `agent.session.header.cwd` 推导 workspace，校验 request bounds，再把检索委托给 provider-neutral search interface。已提供的 `local` provider 从同一 workspace 的 session event 读取有界 citation，并且必须存在于配置的 provider set 中。Provider 配置在加载时解析：空、重复、未知或缺少 `local` 的 route 会在任何 search 运行前失败。该 service 不存储 provider state，不注入 prompt content，也不替代 session persistence。`memory/search` event 会在 consumer 把结果交给后续 model request 前，记录精确的规范化 query 和 citation。
+当 agent 需要同一 workspace session history 中的有界 citation，或需要显式配置的 remote memory provider 时，使用 `dsh-experimental-memory`。默认 local route 读取现有 session-query corpus，不注入 prompt content。可选 TencentDB route 增加持久 automatic capture 和 pre-step recall；OpenViking 增加显式分层 retrieval。所有 remote route 均为选择加入，并且 package 会在网络访问前保持 workspace 与 agent-preset isolation。
 
-TencentDB 通过 `providers: ['local', 'tencentdb']` 和包含 `baseUrl`、memory-instance `serviceId`、非空 `isolationBindings` 列表的 `tencentdb` object 显式启用。每个 binding 把一个绝对 DSH workspace 及其持久日志中的有效 agent preset 映射到已配置的 TencentDB Team、Agent 和 User 标识符；省略 `agentPreset` 只匹配未通过 preset 组合的 session。重复的 DSH scope 和多个 scope 复用同一个 TencentDB Team/Agent profile 会在加载时失败，未绑定调用方则在 HTTP 前失败。这样可在 L1-L3 保持 DSH workspace authorization boundary；Team 和 User 仍由部署显式提供，因为 DSH 没有通用 Team 或已认证 User service。`baseUrl` 必须是纯 HTTP(S) origin，不得包含 userinfo、path、query 或 fragment。数字 loopback Gateway 可以省略 `credentialRef`；即使 Gateway authentication 已关闭，DSH 仍会发送上游 v3 parser 要求的非秘密 bearer marker。`localhost` 等 hostname alias 和所有非 loopback Gateway 都要求非空 DSH credential，其中必须包含非空 Gateway bearer secret；已显式配置但无法解析的 credential 不会 fallback。远程 body 会在 `maxResponseBytes` 内流式读取，并在超限时立即取消，即使响应没有 `Content-Length`；redirect 仍会被拒绝。Native route 把 TencentDB L1 atomic search、L2 scenario profile 和单一 L3 core profile 映射成有界 citation。L2 candidate 按有界 scenario-list path 和 summary 中的 literal query match 排序，随后至多读取剩余 hit limit 数量的项目；忽略目录，list 和所有选中 read 共用一次 operation deadline。上游没有公开相应能力时，DSH 不宣称 semantic L2 search。`automaticCapture: true` 在 Agent 进入 idle 后通过 `POST /v3/conversation/add` 导出 completed 和 max-token turn；排除 synthetic user context，执行上游 100 条消息和 8192 字符限制，校验完整 acceptance result，并在远程操作前后记录持久的 requested、succeeded 或安全 failed event。Capture 仍为 at least once，因为固定版本的上游 route 为每次 retry 生成新 ID，且不接受 idempotency key 或 client message ID。`automaticRecall: true` 在第一步前按 `automaticRecallDepths`（默认 `['L1']`）运行，所有层共享一个 count 和 byte budget，把精确组合结果记录到 `memory/search`，并将 citation 作为标明可能过时且不构成指令的独立 user message 输入。失败层只记录封闭 memory diagnostic vocabulary 中的代码，保留成功层且不阻塞 model turn；cancellation 仍然向上传播。未启用 TencentDB 时开启任一 automatic operation，或缺少连接和隔离配置时启用 route，都会在 composition 加载期间失败。Endpoint、credential、isolation、capture 和 recall 的变更需要重新加载 composition。
+## 目录
 
-`tencentdbRuntime` 让 DSH 拥有同机 standalone MemoryCore process。无论 composition 顺序如何，它都会等待 `@deepseek-ai/dsh-subprocess-local`，在解析 credential 前拒绝 remote 或未指定的 execution world，在 `cwd` 中启动 `args`，显式转发已配置的现有 LLM credential，并要求激活前收到精确的 `{ "status": "ok" }` health envelope。Unload 或 HMR 时会终止完整 process tree。`dataDir` 保存本地 SQLite 和 file state；`gatewayConfig` 默认为 `tdai-gateway.standalone.yaml`。启动时会拒绝非数字 loopback 或带 path 的 endpoint、缺失 LLM credential、已有 HTTP listener、process 提前退出或 readiness timeout。LLM URL 本身可以指向本地 OpenAI-compatible service，因此 managed mode 不要求第三方 memory service。由于上游不发布 standalone Gateway executable，runtime 必须是由 operator 安装并固定到已审查 commit 的 checkout；DSH 不会在应用启动期间 clone 或安装可变外部代码。
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [进一步探索](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
-OpenViking 通过 `providers: ['local', 'openviking']` 和包含纯 HTTP(S)-origin `baseUrl`、可选非空 `credentialRef`、可选非空 trusted `targetUri` 的 `openviking` object 显式启用。Native route 调用已确认的 `POST /api/v1/search/find` endpoint，传入 `query`、`limit` 和配置的 target URI。它把 `result.memories`、`result.resources` 和 `result.skills` record 映射为 opaque citation，并应用 DSH 选择的 `L0`、`L1` 或 `L2` depth、流式 response bound、timeout、cancellation、redirect rejection 和 typed failure。没有该 object 时，route 为 deterministic local stub。Adapter 不使用 session context，也不进行 implicit prompt injection。
+-----
 
-## Model Experience
+<a id="use-this-package"></a>
+## 使用本包
 
-### Service output
+在 base-backed composition 中挂载该 service；只有当模型应主动发起显式搜索时，才添加 `dsh-experimental-tool-memory`。
 
-#### What the model sees
+### 何时选择
 
-Service 本身不注册 model-facing schema 或 prompt text；`memory_search` 负责显式展示其有界 citation。
+需要 workspace-scoped retrieval、显式 remote-memory isolation，或必须在持久 Session log 中可见的 TencentDB capture 与 recall 时，选择此 package。调用方只需要普通 transcript search 时保留现有 session-query stack；此 package 不替代 Session persistence 或 provider-side storage。
 
-#### Token effect
+### 最小配置
 
-除非已组合的 consumer 展示返回的 citation，否则该 service 不增加 token。
+默认 route 依赖 shipped profile 已提供的 base session、projection、agent 与 query service：
 
-#### KV Cache effect
+```yaml
+- id: experimental-memory
+  name: '@deepseek-ai/dsh-experimental-memory'
+```
 
-除非 consumer 显式记录并展示结果，否则该 service 不增加 model context。
+| Field | Default | Meaning |
+|---|---|---|
+| `providers` | `['local']` | 启用的 route；始终要求 `local` |
+| `tencentdb` | absent | TencentDB Gateway endpoint、credential、service 与 isolation binding |
+| `tencentdbRuntime` | absent | 由 DSH 拥有、operator 已安装的本地 MemoryCore process |
+| `openviking` | absent | OpenViking endpoint、credential 与可选 target URI |
+| `automaticCapture` | `false` | 向 TencentDB 导出 completed 与 max-token turn |
+| `automaticRecall` | `false` | 第一步之前 recall TencentDB context |
 
-## Known Limitations and Deferred Work
+所有可接受字段与默认值以生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-memory)为准。
 
-- **Layered recall** — TencentDB 接收 L0 conversation turn 并自行执行 asynchronous extraction。`memory_search` 接受 TencentDB L1-L3 depth。Automatic recall 默认为 L1，也可选择 L2/L3，同时保持一个 aggregate result 和 byte budget。
-- **Capture delivery** — DSH 在发送 turn 前 flush 持久 request，并在之后记录 outcome。Remote success 与本地 success event 之间发生 crash 时可能重发该 turn；必须由 TencentDB message identity 或未来的 idempotency key 关闭这个 at-least-once window。
-- **Opt-in HTTP routes** — TencentDB 和 OpenViking HTTP provider 只通过显式 provider 配置选择；默认 DSH/Web composition 保持不变。OpenViking 保留 deterministic local stub 用于 contract test。TencentDB 接受外部管理的 Gateway，或由 DSH 管理且 operator 已安装的 local runtime。
-- **OpenViking scope** — Native route 使用已确认的 `/api/v1/search/find` envelope 和 trusted deployment `targetUri`；不会从 DSH filesystem path 或 provider response field 推导 tenant authorization。需要 multi-tenant scope 时，部署必须提供隔离的 target URI。
-- **Upstream distribution** — Managed mode 需要已安装并固定 commit 的 MemoryCore checkout，因为当前 upstream npm package 没有 Gateway executable。Configuration load 不会下载 package、clone repository 或 pull container。
-- **Remote durable fields** — Remote hit 省略 DSH session ID 和 event sequence，因为它们不是 first-party session record。`memory/search` 保留 provider ID、opaque source、kind、title 和精确有界 content。
-- **Binding migration** — 移动 workspace 或重命名其 agent preset 需要新 binding；DSH 不移动或合并已有 provider-side profile。
+### Provider 与持久性边界
+
+Local provider 接受精确的 live `Agent`，从 `agent.session.header.cwd` 推导 authority，并返回同一 workspace 的有界 event citation。空、重复、未知或缺少 `local` 的 provider set 会在 composition 阶段失败。Consumer 必须在向后续 model request 展示 citation 前，把精确结果追加为 `memory/search`。
+
+TencentDB 要求纯 HTTP(S) origin、memory-instance service id，以及从绝对 DSH workspace 加可选有效 agent preset 到已配置 Team、Agent、User id 的非空 binding。数字 loopback 可以使用非秘密 local bearer marker；hostname alias 和非 loopback gateway 要求已解析 DSH credential。L1 atomic memory、L2 scenario profile 与单一 L3 core profile 在同一 deadline 和 byte budget 下转换为有界 citation。
+
+启用 `automaticCapture` 时，idle-agent maintenance 从持久 event 投影未捕获的 completed turn，flush `memory/capture-requested`，调用 `/v3/conversation/add`，再记录 success 或封闭 diagnostic code。Delivery 为 at least once。启用 `automaticRecall` 时，第一步在一个 aggregate budget 下搜索配置的 L1-L3 depth，记录精确组合结果，并前置一条标注为可能过时且不构成指令的独立 reference message；失败层不会丢弃成功层或阻塞 turn。
+
+`tencentdbRuntime` 通过 DSH subprocess seam 拥有 operator 已安装、commit-pinned 的 standalone MemoryCore process。它转发现有 LLM credential，激活前要求精确 healthy response，拒绝已占用或非 loopback endpoint，在 `dataDir` 保存状态，并在 unload 时终止 process tree。应用启动绝不会 clone、安装或 pull 可变 upstream code。
+
+OpenViking 调用已确认的 `/api/v1/search/find` route，并按显式 L0-L2 depth 映射 memory、resource 与 skill record。Response streaming、deadline、cancellation、redirect refusal 和 output bound 均会执行。没有 `openviking` object 时，显式启用的 route 是 deterministic local contract-test stub。
+
+-----
+
+<a id="understand-the-implementation"></a>
+## 理解实现
+
+<details>
+<summary>实现内部机制——点击展开</summary>
+
+`MemoryService` 解析 caller authority 与 provider routing。已注册的 Session projection 把直接 user 与 assistant message 折叠为 completed turn，并只在 `memory/capture-succeeded` 后移除 turn，因此 restart recovery 不依赖同步 log scan。Provider adapter 负责 wire validation，并把外部 record 规范化为有界 opaque citation；managed-runtime adapter 只负责 process lifecycle。
+
+| 文件 | 作用 |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Service、configuration、local route、capture projection 与 automatic recall/capture orchestration |
+| [`src/tencentdb-http.ts`](src/tencentdb-http.ts) | TencentDB isolation、L1-L3 retrieval 与 conversation capture |
+| [`src/tencentdb-runtime.ts`](src/tencentdb-runtime.ts) | 受管本地 Gateway lifecycle 与 readiness |
+| [`src/openviking-http.ts`](src/openviking-http.ts) | OpenViking request 与 response boundary |
+| [`src/remote-contract.ts`](src/remote-contract.ts) | 共享 remote citation normalization 与 safe failure |
+| [`src/invariant.ts`](src/invariant.ts) | 持久 memory event 的 runtime invariant check |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## 进一步探索
+
+- [Session-query subsystem](../../../docs/subsystems/session-query.zh.md) — local retrieval corpus 与 filtering boundary。
+- [TencentDB integration guide](../../../docs/user/guide/tencentdb-memory.zh.md) — deployment 与 managed-runtime configuration。
+- [TencentDB integration contract](../../../integrations/tencentdb-agent-memory/README.zh.md) — 固定 upstream surface 与 verification。
+- [Memory tool](../tool-memory/README.zh.md) — 显式 model-facing search 与持久 result recording。
+- [Generated configuration catalog](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-memory) — 完整 loader configuration。
+
+-----
+
+<a id="model-experience"></a>
+## 模型体验
+
+### 服务输出
+
+#### 模型看到什么
+
+Service 本身不注册 model-facing schema。Automatic recall 会提供一条独立 untrusted reference message；`memory_search` 负责显式展示有界 citation。
+
+#### Token 影响
+
+Local 与 capture path 不增加 request token。Automatic recall 增加有界 citation text，已组合的 tool consumer 增加其 schema 与 result。
+
+#### KV Cache 影响
+
+Service 不重写更早 context。Automatic recall 与显式 result 追加在可复用 request prefix 之后。
+
+## 已知限制与延期工作
+
+<a id="known-limitations-and-deferred-work"></a>
+
+以下约束说明 deployment 在何处需要额外 isolation 或 delivery handling。
+
+- **Capture 为 at least once**——remote acceptance 之后、本地 success event 之前 crash 可能重发 turn，因为固定的 upstream route 不接受 idempotency key 或 client message id。
+- **Remote route 为选择加入**——默认 DSH 与 Web composition 不会发出 TencentDB 或 OpenViking request。
+- **OpenViking scope 由 deployment 负责**——provider-side multi-tenancy 重要时，trusted `targetUri` 必须提供 isolation。
+- **Managed mode 需要已安装的 upstream checkout**——当前 upstream package 不发布 standalone Gateway executable。
+- **Remote citation 是 opaque 的**——它们省略 DSH session id 与 event sequence，只保留 provider identity、source metadata 与有界 content。
+- **Binding migration 为手动操作**——改变 workspace 或 agent preset 不会移动或合并已有 provider-side profile。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+无。
+
+</details>

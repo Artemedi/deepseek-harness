@@ -1,0 +1,29 @@
+# Keyless patch for the bounded coordinator/worker/review workflow.
+- id: headless-startup
+  disabled: true
+
+- id: headless-runner
+  disabled: true
+
+- id: llm-deepseek
+  disabled: true
+
+- id: session-title-llm
+  disabled: true
+
+- id: agent-loop
+  config:
+    agents:
+      - id: main
+        provider: workflow-mock
+        model: workflow-mock
+        cwd: !!js process.cwd()
+
+- id: session-persistence-jsonl
+  config:
+    root: './.sessions'
+    compression: none
+
+- insert:
+    - id: workflow-mock-llm
+      name: './tests/fixtures/workflow-mock-llm.ts'

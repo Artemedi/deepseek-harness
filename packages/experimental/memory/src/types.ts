@@ -78,6 +78,18 @@ export interface MemoryCaptureMessage {
   readonly content: string
 }
 
+/** One completed turn awaiting successful remote-memory publication. */
+export interface MemoryCaptureProjectionTurn {
+  readonly turn: number
+  readonly messages: readonly MemoryCaptureMessage[]
+}
+
+/** Host-only resumable state for automatic remote-memory capture. */
+export interface MemoryCaptureProjectionState {
+  readonly active: MemoryCaptureProjectionTurn | null
+  readonly pending: readonly MemoryCaptureProjectionTurn[]
+}
+
 /** Capture input independent of provider-specific tenancy and wire fields. */
 export interface MemoryCaptureRequest {
   readonly messages: readonly MemoryCaptureMessage[]
@@ -165,6 +177,13 @@ declare module '@deepseek-ai/dsh-session/types' {
     'memory/capture-failed': MemoryCaptureFailedEvent
     /** Safe per-layer recall failure that does not block the owning model turn. */
     'memory/recall-failed': MemoryRecallFailedEvent
+  }
+}
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** Completed conversation turns that still require successful memory publication. */
+    memoryCapture: MemoryCaptureProjectionState
   }
 }
 

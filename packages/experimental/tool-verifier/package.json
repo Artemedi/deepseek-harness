@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-experimental-tool-verifier",
   "description": "Explicit model-facing verify_pair tool",
-  "version": "0.1.1-rc.2",
+  "version": "0.1.5-rc.2",
   "private": true,
   "repository": { "type": "git", "url": "git+https://github.com/deepseek-ai/deepseek-harness.git", "directory": "packages/experimental/tool-verifier" },
   "type": "module",

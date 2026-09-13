@@ -1,0 +1,44 @@
+# Real AgentLoop patch for automatic TencentDB recall.
+- id: headless-startup
+  disabled: true
+
+- id: headless-runner
+  disabled: true
+
+- id: llm-deepseek
+  disabled: true
+
+- id: session-query-sqlite
+  disabled: true
+
+- id: agent-loop
+  config:
+    agents:
+      - id: main
+        provider: memory-automatic-recall-mock
+        model: memory-automatic-recall-mock
+        cwd: !!js process.cwd()
+
+- id: session-persistence-jsonl
+  config:
+    root: './.sessions'
+    compression: none
+
+- insert:
+    - id: memory-query
+      name: './tests/fixtures/memory-query.ts'
+    - id: memory-automatic-recall-mock
+      name: './tests/fixtures/memory-automatic-recall-mock.ts'
+    - id: memory-service
+      name: '@deepseek-ai/dsh-experimental-memory'
+      config:
+        providers: [local, tencentdb]
+        automaticRecall: true
+        tencentdb:
+          baseUrl: !!js process.env.DSH_TENCENTDB_TEST_URL
+          serviceId: memory-1
+          isolationBindings:
+            - workspace: !!js process.cwd()
+              teamId: team-1
+              agentId: agent-1
+              userId: user-1

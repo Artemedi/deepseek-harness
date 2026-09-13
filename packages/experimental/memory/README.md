@@ -1,39 +1,138 @@
-# Experimental Memory Service
+---
+description: "Configure workspace-authorized session memory, TencentDB capture and recall, OpenViking retrieval, or a managed local MemoryCore Gateway."
+kind: "package-reference"
+---
+
+# @deepseek-ai/dsh-experimental-memory
 
 English | [中文](README.zh.md)
 
-`@deepseek-ai/dsh-experimental-memory` provides explicit, workspace-authorized retrieval over the DSH session-query corpus.
+## Summary
 
-The service accepts an exact live `Agent`, derives the workspace from `agent.session.header.cwd`, validates request bounds, and delegates retrieval to a provider-neutral search interface. The shipped `local` provider reads bounded citations from same-workspace session events and is mandatory in the configured provider set. Provider configuration is resolved at load time: empty, duplicate, unknown, or missing-`local` routes fail before any search runs. The service does not store provider state, inject prompt content, or replace session persistence. The `memory/search` event records the exact normalized query and citations before a consumer gives them to a later model request.
+Use `dsh-experimental-memory` when an agent needs bounded citations from same-workspace session history or an explicitly configured remote memory provider. The default local route reads the existing session-query corpus without injecting prompt content. Optional TencentDB routes add durable automatic capture and pre-step recall; OpenViking adds explicit layered retrieval. Every remote route is opt-in, and the package preserves workspace and agent-preset isolation before network access.
 
-TencentDB can be enabled explicitly with `providers: ['local', 'tencentdb']` and a `tencentdb` object containing `baseUrl`, memory-instance `serviceId`, and a non-empty `isolationBindings` list. Each binding maps one absolute DSH workspace plus its effective durable agent preset to provisioned TencentDB Team, Agent, and User identifiers; omission of `agentPreset` matches only sessions composed without one. Duplicate DSH scopes and reuse of one TencentDB Team/Agent profile across scopes fail at load, while an unbound caller fails before HTTP. This preserves the DSH workspace authorization boundary through L1-L3; Team and User stay explicit because DSH has no universal Team or authenticated User service. `baseUrl` must be a bare HTTP(S) origin with no userinfo, path, query, or fragment. A numeric loopback Gateway may omit `credentialRef`; DSH then supplies the non-secret bearer marker required by the upstream v3 parser even when Gateway authentication is disabled. Hostname aliases such as `localhost` and every non-loopback Gateway require a non-empty DSH credential containing the Gateway's non-empty bearer secret, and an explicitly configured but unresolved credential fails without fallback. Remote bodies are streamed under `maxResponseBytes` and cancelled immediately on overflow, even without `Content-Length`; redirects remain rejected. The native route maps TencentDB L1 atomic search, L2 scenario profiles, and the singleton L3 core profile to bounded citations. L2 candidates are ranked by literal query matches in the bounded scenario-list path and summary, then at most the remaining hit limit is read; directories are ignored and the list plus every selected read share one operation deadline. DSH does not claim semantic L2 search where upstream exposes none. `automaticCapture: true` exports completed and max-token turns through `POST /v3/conversation/add` after the Agent becomes idle; it excludes synthetic user context, enforces the upstream 100-message and 8192-character limits, validates the complete acceptance result, and records durable requested, succeeded, or safe failed events around the remote operation. Capture remains at least once because the pinned upstream route generates new IDs for every retry and accepts neither idempotency keys nor client message IDs. `automaticRecall: true` runs before the first step with `automaticRecallDepths` (default `['L1']`), shares one count and byte budget across layers, records the exact combined result in `memory/search`, and enters the citations as a separate user message labelled as stale, non-instructional reference context. A failing layer records only a code from the closed memory diagnostic vocabulary, preserves successful layers, and does not block the model turn; cancellation still propagates. Enabling either automatic operation without TencentDB or enabling the route without its connection and isolation configuration fails during composition loading. Endpoint, credential, isolation, capture, and recall changes require reloading the composition.
+## Table of Contents
 
-`tencentdbRuntime` makes DSH own a co-located standalone MemoryCore process. It waits for `@deepseek-ai/dsh-subprocess-local` regardless of composition order, rejects remote or unspecified execution worlds before resolving credentials, launches `args` in `cwd`, explicitly forwards the configured existing LLM credential, and requires the exact `{ "status": "ok" }` health envelope before activation. It terminates the complete process tree on unload or HMR. `dataDir` owns the local SQLite and file state; `gatewayConfig` defaults to `tdai-gateway.standalone.yaml`. Startup rejects a non-numeric-loopback or path-bearing endpoint, a missing LLM credential, any existing HTTP listener, an early process exit, or a readiness timeout. The LLM URL may itself be a local OpenAI-compatible service, so managed mode does not require a third-party memory service. The runtime must be an operator-installed checkout pinned to a reviewed commit because upstream does not publish a standalone Gateway executable; DSH never clones or installs mutable external code during application startup.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-OpenViking can be enabled explicitly with `providers: ['local', 'openviking']` and an `openviking` object containing a bare HTTP(S)-origin `baseUrl`, optional non-empty `credentialRef`, and optional non-empty trusted `targetUri`. The native route calls the confirmed `POST /api/v1/search/find` endpoint with `query`, `limit`, and the configured target URI. It maps `result.memories`, `result.resources`, and `result.skills` records into opaque citations and applies the DSH-selected `L0`, `L1`, or `L2` depth, streaming response bound, timeout, cancellation, redirect rejection, and typed failures. Without that object, the route is a deterministic local stub. The adapter does not use session context or implicit prompt injection.
+-----
 
+<a id="use-this-package"></a>
+## Use this package
+
+Mount the service in a base-backed composition, then add `dsh-experimental-tool-memory` only when the model should initiate explicit searches.
+
+### When to choose it
+
+Choose this package for workspace-scoped retrieval, explicit remote-memory isolation, or TencentDB capture and recall that must remain visible in the durable Session log. Keep the existing session-query stack alone when callers need only ordinary transcript search; this package does not replace Session persistence or provider-side storage.
+
+### Minimal configuration
+
+The default route requires the base session, projection, agent, and query services already present in shipped profiles:
+
+```yaml
+- id: experimental-memory
+  name: '@deepseek-ai/dsh-experimental-memory'
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `providers` | `['local']` | Enabled routes; `local` is always required |
+| `tencentdb` | absent | TencentDB Gateway endpoint, credential, service, and isolation bindings |
+| `tencentdbRuntime` | absent | Operator-installed local MemoryCore process owned by DSH |
+| `openviking` | absent | OpenViking endpoint, credential, and optional target URI |
+| `automaticCapture` | `false` | Export completed and max-token turns to TencentDB |
+| `automaticRecall` | `false` | Recall TencentDB context before the first step |
+
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-memory) is the exhaustive source for every accepted field and default.
+
+### Provider and durability boundaries
+
+The local provider accepts an exact live `Agent`, derives authority from `agent.session.header.cwd`, and returns bounded same-workspace event citations. Empty, duplicate, unknown, or missing-`local` provider sets fail at composition time. A consumer must append the exact result as `memory/search` before presenting citations to a later model request.
+
+TencentDB requires a bare HTTP(S) origin, a memory-instance service id, and non-empty bindings from absolute DSH workspace plus optional effective agent preset to provisioned Team, Agent, and User ids. Numeric loopback may use the non-secret local bearer marker; hostname aliases and non-loopback gateways require a resolved DSH credential. L1 atomic memory, L2 scenario profiles, and the singleton L3 core profile become bounded citations under one deadline and byte budget.
+
+With `automaticCapture`, idle-agent maintenance projects uncaptured completed turns from durable events, flushes `memory/capture-requested`, calls `/v3/conversation/add`, and records success or a closed diagnostic code. Delivery is at least once. With `automaticRecall`, the first step searches configured L1-L3 depths under one aggregate budget, logs the exact combined result, and prepends a separate message labelled as stale, non-instructional reference context; a failed layer does not discard successful layers or block the turn.
+
+`tencentdbRuntime` owns an operator-installed, commit-pinned standalone MemoryCore process through the DSH subprocess seam. It forwards an existing LLM credential, requires an exact healthy response before activation, rejects occupied or non-loopback endpoints, retains state under `dataDir`, and terminates the process tree on unload. Application startup never clones, installs, or pulls mutable upstream code.
+
+OpenViking calls the confirmed `/api/v1/search/find` route and maps memory, resource, and skill records at explicit L0-L2 depth. Response streaming, deadlines, cancellation, redirect refusal, and output bounds remain enforced. Without an `openviking` object, the explicitly enabled route is a deterministic local contract-test stub.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+`MemoryService` resolves caller authority and provider routing. A registered Session projection folds direct user and assistant messages into completed turns and removes a turn only after `memory/capture-succeeded`, so restart recovery does not depend on synchronous log scans. Provider adapters own wire validation and normalize external records into bounded opaque citations; the managed-runtime adapter owns only process lifecycle.
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Service, configuration, local route, capture projection, and automatic recall/capture orchestration |
+| [`src/tencentdb-http.ts`](src/tencentdb-http.ts) | TencentDB isolation, L1-L3 retrieval, and conversation capture |
+| [`src/tencentdb-runtime.ts`](src/tencentdb-runtime.ts) | Managed local Gateway lifecycle and readiness |
+| [`src/openviking-http.ts`](src/openviking-http.ts) | OpenViking request and response boundary |
+| [`src/remote-contract.ts`](src/remote-contract.ts) | Shared remote citation normalization and safe failures |
+| [`src/invariant.ts`](src/invariant.ts) | Runtime invariant checks for durable memory events |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+- [Session-query subsystem](../../../docs/subsystems/session-query.md) — the local retrieval corpus and filtering boundary.
+- [TencentDB integration guide](../../../docs/user/guide/tencentdb-memory.md) — deployment and managed-runtime configuration.
+- [TencentDB integration contract](../../../integrations/tencentdb-agent-memory/README.md) — pinned upstream surface and verification.
+- [Memory tool](../tool-memory/README.md) — explicit model-facing search and durable result recording.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-memory) — complete loader configuration.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Service output
 
 #### What the model sees
 
-The service itself registers no model-facing schema or prompt text; `memory_search` owns the explicit presentation of its bounded citations.
+The service itself registers no model-facing schema. Automatic recall contributes a separate untrusted reference message; `memory_search` owns explicit presentation of bounded citations.
 
 #### Token effect
 
-No tokens are added by this service unless a composed consumer presents a returned citation.
+The local and capture paths add no request tokens. Automatic recall adds bounded citation text, and a composed tool consumer adds its schema and result.
 
 #### KV Cache effect
 
-The service does not add model context unless a consumer explicitly records and presents its result.
+The service does not rewrite earlier context. Automatic recall and explicit results append after the reusable request prefix.
 
 ## Known Limitations and Deferred Work
 
-- **Layered recall** — TencentDB receives L0 conversation turns and performs its own asynchronous extraction. `memory_search` accepts TencentDB depths L1-L3. Automatic recall defaults to L1 and can opt into L2/L3 while preserving one aggregate result and byte budget.
-- **Capture delivery** — DSH flushes the durable request before sending a turn and records the outcome afterward. A crash between remote success and the local success event can resend that turn; TencentDB message identity or a future idempotency key must close this at-least-once window.
-- **Opt-in HTTP routes** — TencentDB and OpenViking HTTP providers are selected only by explicit provider configuration; the default DSH/Web composition remains unchanged. OpenViking retains a deterministic local stub for contract tests. TencentDB accepts an externally managed Gateway or a DSH-managed, operator-installed local runtime.
-- **OpenViking scope** — the native route uses the confirmed `/api/v1/search/find` envelope and a trusted deployment `targetUri`; it does not infer tenant authorization from DSH filesystem paths or provider response fields. The deployment must provide an isolated target URI when multi-tenant scope matters.
-- **Upstream distribution** — Managed mode needs an installed, commit-pinned MemoryCore checkout because the current upstream npm package has no Gateway executable. Configuration load never downloads packages, clones repositories, or pulls containers.
-- **Remote durable fields** — remote hits omit DSH session ids and event sequences because they are not first-party session records. They retain provider id, opaque source, kind, title, and exact bounded content in `memory/search`.
-- **Binding migration** — moving a workspace or renaming its agent preset requires a new binding; DSH does not move or merge the existing provider-side profile.
+<a id="known-limitations-and-deferred-work"></a>
+
+These constraints define where deployments need extra isolation or delivery handling.
+
+- **Capture is at least once** — a crash after remote acceptance but before the local success event can resend a turn because the pinned upstream route accepts no idempotency key or client message id.
+- **Remote routes are opt-in** — the default DSH and Web compositions make no TencentDB or OpenViking request.
+- **OpenViking scope is deployment-owned** — a trusted `targetUri` must provide isolation when provider-side multi-tenancy matters.
+- **Managed mode needs an installed upstream checkout** — the current upstream package does not publish a standalone Gateway executable.
+- **Remote citations are opaque** — they omit DSH session ids and event sequences and retain only provider identity, source metadata, and bounded content.
+- **Binding migration is manual** — changing a workspace or agent preset does not move or merge an existing provider-side profile.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import AgentRegistry, { agentEvents, Inbox } from '@deepseek-ai/dsh-agent'
+import AgentRegistry, { agentEvents } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import SessionStore, { Session, SessionId, SessionSeq, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-presets'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import type { SessionEventSearchDocument, SessionRecord } from '@deepseek-ai/dsh-session-query'
 import MemoryService from '@deepseek-ai/dsh-experimental-memory'
@@ -47,11 +49,21 @@ class TestQuery extends SessionQueryEngine {
 }
 
 function header(id: string, cwd?: string): SessionHeader {
-  return { version: SESSION_FORMAT_VERSION, id: SessionId(id), createdAt: 1, ...(cwd === undefined ? {} : { cwd }) }
+  return {
+    version: SESSION_FORMAT_VERSION,
+    id: SessionId(id),
+    createdAt: 1,
+    isSeeded: false,
+    ...(cwd === undefined ? {} : { cwd }),
+  }
 }
 
 function agentFor(ctx: Context, session: Session): { agent: Agent; dispose: () => void } {
-  const inbox = new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} })
+  const unsupported = (): never => { throw new Error('memory test agent does not support inbox mutation') }
+  const inbox: Agent['inbox'] = {
+    nextTurn: [], nextStep: [], clear: unsupported, append: unsupported,
+    prepend: unsupported, replace: unsupported, remove: unsupported, splice: unsupported,
+  }
   const agent: Agent = {
     id: session.id,
     options: {},
@@ -73,6 +85,8 @@ function agentFor(ctx: Context, session: Session): { agent: Agent; dispose: () =
 async function setup(cwd?: string, documentText = 'gateway retry evidence', config?: Config): Promise<{ ctx: Context; agent: Agent; service: MemoryService; disposeAgent: () => void }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
+  ctx.sessionProjections.register(agentPresetProjectionDefinition)
   await ctx.plugin(AgentRegistry)
   const credentialValues: Record<string, string> = {}
   if (config?.tencentdb?.credentialRef !== undefined) credentialValues.TENCENT_KEY = 'secret-value'
@@ -83,7 +97,7 @@ async function setup(cwd?: string, documentText = 'gateway retry evidence', conf
     constructor(owner: Context) {
       super(owner, [{ header: header(String(source), cwd), live: false, persisted: true }], [{
         sessionId: source,
-        seq: 1,
+        seq: SessionSeq(1),
         type: 'user/message',
         time: 1,
         surface: 'current',
@@ -331,17 +345,50 @@ describe('MemoryService', () => {
     }), { surfaceOp: 'append' })
     agent.session.append('assistant/message', {
       turn: 1, step: 1,
+      stream: [],
       message: createAssistantMessage({ content: [{ type: 'text', text: 'noted' }], source: { provider: 'mock', model: 'mock' } }),
-    }, { surfaceOp: 'append', sourceEventSeqs: [] })
+    }, { surfaceOp: 'append' })
     agent.session.append('step/end', { turn: 1, step: 1 })
     agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
 
     await service.captureCompletedTurns(agent, new AbortController().signal)
-    expect(agent.session.events.find(event => event.type === 'memory/capture-succeeded')).toBeDefined()
-    expect(agent.session.events.filter(event => event.type === 'memory/capture-requested')).toHaveLength(1)
+    expect(agent.session.snapshotEvents().find(event => event.type === 'memory/capture-succeeded')).toBeDefined()
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'memory/capture-requested')).toHaveLength(1)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     await ctx.fiber.dispose()
     vi.unstubAllGlobals()
+  })
+
+  it('reconstructs uncaptured completed turns from restored session history', async () => {
+    const { ctx, agent, service } = await setup('/workspace/a', 'unused', {
+      providers: ['local', 'tencentdb'],
+      tencentdb: {
+        baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
+      },
+    })
+    agent.session.append('turn/start', { turn: 1 })
+    agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'restore this capture' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    agent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+
+    const restoredSession = ctx.sessions.create(SessionId('memory-restored'), {
+      seed: agent.session.snapshotEvents(), meta: { cwd: '/workspace/a' },
+    })
+    const restored = agentFor(ctx, restoredSession)
+    const capture = vi.fn(async () => {})
+    const providers = Reflect.get(service, 'providers') as Map<string, MemoryProvider>
+    providers.set('tencentdb', { id: 'tencentdb', search: async () => [], capture })
+
+    await service.captureCompletedTurns(restored.agent, new AbortController().signal)
+    await service.captureCompletedTurns(restored.agent, new AbortController().signal)
+    expect(capture).toHaveBeenCalledOnce()
+    expect(capture).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: SessionId('memory-restored'),
+      messages: [{ role: 'user', content: 'restore this capture' }],
+    }))
+    restored.dispose()
+    await ctx.fiber.dispose()
   })
 
   it('drives automatic capture only on idle and contains maintenance rejection', async () => {
@@ -380,7 +427,7 @@ describe('MemoryService', () => {
     }), { surfaceOp: 'append' })
     agent.session.append('turn/end', { turn: 2, reason: { kind: 'completed' } })
     await expect(service.captureCompletedTurns(agent, new AbortController().signal)).resolves.toBeUndefined()
-    expect(agent.session.events.filter(event => event.type === 'memory/capture-requested')).toHaveLength(0)
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'memory/capture-requested')).toHaveLength(0)
 
     const cancelled = new AbortController()
     cancelled.abort(new Error('capture pass cancelled'))
@@ -403,8 +450,8 @@ describe('MemoryService', () => {
           baseUrl: 'http://127.0.0.1:8420', serviceId: 'memory-1', isolationBindings,
         },
       })
-      current.agent.session.append('step/start', { turn: 3, step: 1 })
       current.agent.session.append('turn/start', { turn: 3 })
+      current.agent.session.append('step/start', { turn: 3, step: 1 })
       current.agent.session.append('user/message', createUserMessage({
         content: [
           { type: 'reasoning', text: 'hidden' },
@@ -418,8 +465,9 @@ describe('MemoryService', () => {
       }), { surfaceOp: 'append' })
       current.agent.session.append('assistant/message', {
         turn: 3, step: 1,
+        stream: [],
         message: createAssistantMessage({ content: [{ type: 'text', text: ' ' }], source: { provider: 'mock', model: 'mock' } }),
-      }, { surfaceOp: 'append', sourceEventSeqs: [] })
+      }, { surfaceOp: 'append' })
       current.agent.session.append('turn/end', { turn: 3, reason: { kind: 'max-tokens' } })
       const providers = Reflect.get(current.service, 'providers') as Map<string, MemoryProvider>
       providers.set('tencentdb', {
@@ -428,7 +476,7 @@ describe('MemoryService', () => {
         async capture() { throw error },
       })
       await current.service.captureCompletedTurns(current.agent, new AbortController().signal)
-      expect(current.agent.session.events.findLast(event => event.type === 'memory/capture-failed')?.data.code).toBe(code)
+      expect(current.agent.session.snapshotEvents().findLast(event => event.type === 'memory/capture-failed')?.data.code).toBe(code)
       await current.ctx.fiber.dispose()
     }
   })
@@ -448,7 +496,7 @@ describe('MemoryService', () => {
     const recalled = await service.recallForStep(agent, [createUserMessage({
       content: [{ type: 'text', text: 'How should I install packages?' }], source: { kind: 'user' },
     })], new AbortController().signal)
-    expect(agent.session.events.findLast(event => event.type === 'memory/search')?.data)
+    expect(agent.session.snapshotEvents().findLast(event => event.type === 'memory/search')?.data)
       .toMatchObject({ provider: 'tencentdb', hits: [{ id: 'tencentdb:fact-1', content: 'Use pnpm.' }] })
     expect(recalled).toMatchObject({
       source: { kind: 'plugin', plugin: 'experimental-memory' },
@@ -520,7 +568,7 @@ describe('MemoryService', () => {
     await expect(service.recallForStep(agent, [createUserMessage({
       content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' },
     })], new AbortController().signal)).resolves.toBeUndefined()
-    expect(agent.session.events.findLast(event => event.type === 'memory/recall-failed')?.data)
+    expect(agent.session.snapshotEvents().findLast(event => event.type === 'memory/recall-failed')?.data)
       .toEqual({ version: 1, provider: 'tencentdb', code: 'MEMORY_PROVIDER_UNAVAILABLE', depth: 'L1' })
     await ctx.fiber.dispose()
     vi.unstubAllGlobals()
@@ -540,9 +588,9 @@ describe('MemoryService', () => {
     await expect(service.recallForStep(agent, [createUserMessage({
       content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' },
     })], new AbortController().signal)).resolves.toBeUndefined()
-    expect(agent.session.events.findLast(event => event.type === 'memory/recall-failed')?.data)
+    expect(agent.session.snapshotEvents().findLast(event => event.type === 'memory/recall-failed')?.data)
       .toEqual({ version: 1, provider: 'tencentdb', code: 'MEMORY_PROVIDER_ERROR', depth: 'L1' })
-    expect(JSON.stringify(agent.session.events)).not.toContain('tenant-token')
+    expect(JSON.stringify(agent.session.snapshotEvents())).not.toContain('tenant-token')
     await ctx.fiber.dispose()
     vi.unstubAllGlobals()
   })
@@ -564,7 +612,7 @@ describe('MemoryService', () => {
     const recalled = await service.recallForStep(agent, [createUserMessage({
       content: [{ type: 'text', text: 'How should I respond?' }], source: { kind: 'user' },
     })], new AbortController().signal)
-    expect(agent.session.events.findLast(event => event.type === 'memory/search')?.data.hits)
+    expect(agent.session.snapshotEvents().findLast(event => event.type === 'memory/search')?.data.hits)
       .toMatchObject([{ source: 'tencentdb:atomic:fact-1' }, { source: 'tencentdb:core:persona' }])
     expect(recalled?.content).toMatchObject([{ type: 'text', text: expect.stringContaining('Keep answers concise.') }])
     await ctx.fiber.dispose()
@@ -591,10 +639,10 @@ describe('MemoryService', () => {
     await expect(service.recallForStep(agent, [createUserMessage({
       content: [{ type: 'text', text: 'q' }], source: { kind: 'user' },
     })], new AbortController().signal)).resolves.toBeDefined()
-    expect(agent.session.events.filter(event => event.type === 'memory/recall-failed').map(event => event.data))
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'memory/recall-failed').map(event => event.data))
       .toEqual([{ version: 1, provider: 'tencentdb', code: 'MEMORY_PROVIDER_UNAVAILABLE', depth: 'L2' }])
-    expect(agent.session.events.filter(event => event.type === 'memory/search')).toHaveLength(1)
-    expect(agent.session.events.findLast(event => event.type === 'memory/search')?.data.hits)
+    expect(agent.session.snapshotEvents().filter(event => event.type === 'memory/search')).toHaveLength(1)
+    expect(agent.session.snapshotEvents().findLast(event => event.type === 'memory/search')?.data.hits)
       .toHaveLength(2)
     await ctx.fiber.dispose()
     vi.unstubAllGlobals()
@@ -632,7 +680,7 @@ describe('MemoryService', () => {
     await expect(empty.service.recallForStep(empty.agent, [createUserMessage({
       content: [{ type: 'text', text: 'q' }], source: { kind: 'user' },
     })], new AbortController().signal)).resolves.toBeUndefined()
-    expect(empty.agent.session.events.findLast(event => event.type === 'memory/search')).toBeDefined()
+    expect(empty.agent.session.snapshotEvents().findLast(event => event.type === 'memory/search')).toBeDefined()
     await empty.ctx.fiber.dispose()
     vi.unstubAllGlobals()
   })
@@ -763,7 +811,7 @@ describe('MemoryService', () => {
 
     const empty = await setup('/workspace/a')
     vi.spyOn(empty.ctx.sessionQuery, 'filterEvents').mockResolvedValue([{
-      sessionId: SessionId('memory-source'), seq: 1, type: 'user/message', time: 1, surface: 'current', text: ' ',
+      sessionId: SessionId('memory-source'), seq: SessionSeq(1), type: 'user/message', time: 1, surface: 'current', text: ' ',
     }])
     await expect(empty.service.search(empty.agent, {
       query: 'retry', signal: new AbortController().signal,

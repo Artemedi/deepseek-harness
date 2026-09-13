@@ -6,15 +6,17 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
+import type {} from '@deepseek-ai/dsh-agent-presets'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
+import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type SessionQueryEngine from '@deepseek-ai/dsh-session-query'
-import type { MemoryCaptureMessage, MemoryCaptureRequest, MemoryDiagnosticCode, MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
+import { z as zod } from 'zod'
+import type { MemoryCaptureProjectionState, MemoryCaptureRequest, MemoryDiagnosticCode, MemoryId, MemoryProvider, MemoryProviderSearchRequest, MemorySearchRequest, MemorySearchResult, ResolvedMemorySearchSpec } from './types.ts'
 import { normalizeOpenVikingRecords, OPENVIKING_STUB_RECORDS } from './remote-contract.ts'
 import TencentDbHttpProvider, { type TencentDbHttpConfig } from './tencentdb-http.ts'
 import OpenVikingHttpProvider, { type OpenVikingHttpConfig } from './openviking-http.ts'
@@ -23,6 +25,72 @@ import { startTencentDbManagedRuntime, type TencentDbManagedRuntimeConfig } from
 function MemoryId(id: string): MemoryId {
   return id as MemoryId
 }
+
+function agentPresetOf(agent: Agent): string | undefined {
+  return agent.ctx.get('sessionProjections')?.stateOf(agent.session, 'agentPreset')
+    ?? agent.ctx.get('agentPresets')?.composedPreset(agent.ctx)
+    ?? agent.session.header.agentPreset
+}
+
+const memoryCaptureMessageSchema = zod.object({
+  role: zod.enum(['user', 'assistant']),
+  content: zod.string(),
+}).strict()
+
+const memoryCaptureTurnSchema = zod.object({
+  turn: zod.number().int().nonnegative(),
+  messages: zod.array(memoryCaptureMessageSchema),
+}).strict()
+
+const memoryCaptureProjectionDefinition = {
+  key: 'memoryCapture',
+  stateVersion: 1,
+  stateSchema: zod.object({
+    active: memoryCaptureTurnSchema.nullable(),
+    pending: zod.array(memoryCaptureTurnSchema),
+  }).strict(),
+  init: (): MemoryCaptureProjectionState => ({ active: null, pending: [] }),
+  apply: (state, event): MemoryCaptureProjectionState => {
+    switch (event.type) {
+      case 'turn/start':
+        return { active: { turn: event.data.turn, messages: [] }, pending: state.pending }
+      case 'user/message': {
+        if (state.active === null || event.data.source.kind !== 'user') return state
+        const content = textContent(event.data.content)
+        if (content === '') return state
+        return {
+          active: { ...state.active, messages: [...state.active.messages, { role: 'user', content }] },
+          pending: state.pending,
+        }
+      }
+      case 'assistant/message': {
+        if (state.active === null || event.data.turn !== state.active.turn) return state
+        const content = textContent(event.data.message.content)
+        if (content === '') return state
+        return {
+          active: { ...state.active, messages: [...state.active.messages, { role: 'assistant', content }] },
+          pending: state.pending,
+        }
+      }
+      case 'turn/end': {
+        if (state.active === null || state.active.turn !== event.data.turn) return state
+        const complete = event.data.reason.kind === 'completed' || event.data.reason.kind === 'max-tokens'
+        return {
+          active: null,
+          pending: complete && state.active.messages.length > 0
+            ? [...state.pending.filter(turn => turn.turn !== state.active?.turn), state.active]
+            : state.pending,
+        }
+      }
+      case 'memory/capture-succeeded': {
+        const pending = state.pending.filter(turn => turn.turn !== event.data.turn)
+        return pending.length === state.pending.length ? state : { active: state.active, pending }
+      }
+      default:
+        return state
+    }
+  },
+} satisfies ProjectionDefinition<'memoryCapture', MemoryCaptureProjectionState>
 
 export type * from './types.ts'
 export { normalizeOpenVikingRecords, normalizeTencentDbRecords, remoteFailure } from './remote-contract.ts'
@@ -157,7 +225,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Explicit local-memory service over the existing session-query corpus. */
 export default class MemoryService extends Service {
-  static inject = ['agents', 'sessionQuery', 'sessions']
+  static inject = ['agents', 'sessionProjections', 'sessionQuery', 'sessions']
 
   private readonly config: {
     readonly defaultLimit: number
@@ -175,6 +243,7 @@ export default class MemoryService extends Service {
   /** @param ctx - owning Cordis context. @param config - retrieval caps. */
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'memory')
+    ctx.sessionProjections.register<'memoryCapture', MemoryCaptureProjectionState>(memoryCaptureProjectionDefinition)
     this.config = {
       defaultLimit: config.defaultLimit ?? 5,
       defaultMaxContentBytes: config.defaultMaxContentBytes ?? 8_192,
@@ -313,7 +382,7 @@ export default class MemoryService extends Service {
    */
   async search(agent: Agent, request: MemorySearchRequest): Promise<MemorySearchResult> {
     const spec = this.resolve(agent, request)
-    const agentPreset = resolveSessionPreset(agent.session)
+    const agentPreset = agentPresetOf(agent)
     const providerRequest: MemoryProviderSearchRequest = {
       workspace: spec.workspace, query: spec.query, limit: spec.limit, maxContentBytes: spec.maxContentBytes, signal: spec.signal,
       ...spec.depth === undefined ? {} : { depth: spec.depth },
@@ -342,7 +411,7 @@ export default class MemoryService extends Service {
     if (provider?.capture === undefined) {
       throw new HarnessError(`memory provider "${providerId}" does not support capture`, 'MEMORY_PROVIDER_ERROR')
     }
-    const agentPreset = resolveSessionPreset(agent.session)
+    const agentPreset = agentPresetOf(agent)
     await provider.capture({
       sessionId: agent.session.id,
       workspace,
@@ -359,19 +428,11 @@ export default class MemoryService extends Service {
    * @param signal - cancellation for the maintenance pass and provider calls.
    */
   async captureCompletedTurns(agent: Agent, signal: AbortSignal): Promise<void> {
-    const succeeded = new Set<number>()
-    const completed: number[] = []
-    for (const event of agent.session.events) {
-      if (event.type === 'memory/capture-succeeded') succeeded.add(event.data.turn)
-      if (event.type === 'turn/end' && (event.data.reason.kind === 'completed' || event.data.reason.kind === 'max-tokens')) {
-        completed.push(event.data.turn)
-      }
-    }
-    for (const turn of completed) {
+    if (signal.aborted) throw signal.reason
+    const state = this.ctx.sessionProjections.stateOf(agent.session, 'memoryCapture')
+    if (state === undefined) throw new Error('memory capture projection is not registered')
+    for (const { turn, messages } of state.pending) {
       if (signal.aborted) throw signal.reason
-      if (succeeded.has(turn)) continue
-      const messages = turnCaptureMessages(agent, turn)
-      if (messages.length === 0) continue
       agent.session.append('memory/capture-requested', {
         version: 1, provider: 'tencentdb', turn, messageCount: messages.length,
       })
@@ -451,24 +512,6 @@ function memoryDiagnosticCode(error: unknown): MemoryDiagnosticCode {
     default:
       return 'MEMORY_PROVIDER_ERROR'
   }
-}
-
-function turnCaptureMessages(agent: Agent, turn: number): MemoryCaptureMessage[] {
-  const messages: MemoryCaptureMessage[] = []
-  let inside = false
-  for (const event of agent.session.events) {
-    if (event.type === 'turn/start' && event.data.turn === turn) inside = true
-    if (!inside) continue
-    if (event.type === 'user/message' && event.data.source.kind === 'user') {
-      const content = textContent(event.data.content)
-      if (content !== '') messages.push({ role: 'user', content })
-    } else if (event.type === 'assistant/message' && event.data.turn === turn) {
-      const content = textContent(event.data.message.content)
-      if (content !== '') messages.push({ role: 'assistant', content })
-    }
-    if (event.type === 'turn/end' && event.data.turn === turn) break
-  }
-  return messages
 }
 
 function textContent(content: readonly { readonly type: string; readonly text?: string }[]): string {
