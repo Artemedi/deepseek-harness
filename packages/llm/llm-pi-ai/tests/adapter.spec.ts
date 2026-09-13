@@ -396,6 +396,17 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.paths).toEqual(['/chat/completions'])
   })
 
+  it('does not let "overloaded" wording override a permanent auth failure', async () => {
+    const server = await mockServer([{
+      status: 401,
+      body: JSON.stringify({ error: { message: '401 Unauthorized: account temporarily overloaded with requests, check your API key' } }),
+    }])
+    const ctx = await harness(server.url)
+    const result = await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
+    expect(server.paths).toEqual(['/chat/completions'])
+  })
+
   it('uses the resolved catalog context window for usage-based overflow detection', async () => {
     const model = getBuiltinModels('deepseek').find(candidate => candidate.id === 'deepseek-v4-flash')
     if (model === undefined) throw new Error('deepseek-v4-flash missing from pi-ai test catalog')
