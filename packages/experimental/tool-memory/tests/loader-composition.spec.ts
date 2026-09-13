@@ -138,7 +138,8 @@ describe('experimental memory real Loader composition', () => {
 
     const viking = await ctx.tools.execute({ signal: new AbortController().signal, callId: ToolCallId('memory-viking'), name: 'memory_search', arguments: { provider: 'openviking', depth: 'L1', query: 'retry' }, agent: owner })
     expect(viking.isError).toBe(false)
-    expect(viking.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('openviking:viking://stub/retry') })
+    expect(viking.content[0]?.type).toBe('text')
+    expect(viking.content[0]?.type === 'text' ? viking.content[0].text : '').toContain('openviking:viking://stub/retry')
     expect(owner.session.snapshotEvents().filter(event => event.type === 'memory/search')).toHaveLength(2)
     const memoryEvent = owner.session.snapshotEvents().find(event => event.type === 'memory/search')
     expect(memoryEvent).toBeDefined()

@@ -3,9 +3,7 @@ import { KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'
 
 describe('memory persistence vocabulary', () => {
   it('keeps every durable memory event resumable', () => {
-    expect(KNOWN_SESSION_EVENT_TYPES).toEqual(expect.objectContaining({
-      size: expect.any(Number),
-    }))
+    expect(KNOWN_SESSION_EVENT_TYPES.size).toBeGreaterThan(0)
     for (const type of [
       'memory/search',
       'memory/capture-requested',

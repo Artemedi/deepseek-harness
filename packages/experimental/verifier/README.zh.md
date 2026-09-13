@@ -64,7 +64,7 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | Configuration、credential lookup、request boundary 与 response validation |
 | [`src/types.ts`](src/types.ts) | Provider-neutral comparison request 与 result type |
-| [`src/invariant.ts`](src/invariant.ts) | Runtime service invariant |
+| — | 不发布 runtime invariant companion；每次比较只返回一个已验证的不可变结果，不持有 package-owned durable state。 |
 
 </details>
 
@@ -75,7 +75,7 @@ kind: "package-reference"
 
 - [Credentials subsystem](../../credentials/README.zh.md) — secret resolution boundary。
 - [Verifier tool](../tool-verifier/README.zh.md) — 显式 model-facing consumer。
-- [Experimental verifier bundle](../../bundle/experimental-verifier/README.zh.md) — 选择加入的 profile layer。
+- [Experimental verifier bundle](../verifier-bundle/README.zh.md) — 选择加入的 profile layer。
 - [Generated configuration catalog](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-verifier) — 精确 default 与 bound。
 
 -----

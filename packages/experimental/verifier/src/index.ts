@@ -114,8 +114,12 @@ export default class VerifierService extends Service implements VerifierProvider
     const credential = await this.ctx.credentials.resolve(credentialRef(this.config.apiKeyEnv))
     if (credential === undefined) throw new VerifierError(`verifier credential ${this.config.apiKeyEnv} is not configured`, 'UNCONFIGURED')
     const controller = new AbortController()
-    const deadline = setTimeout(() => controller.abort(new Error('verifier request timed out')), this.config.timeoutMs)
-    const abort = () => controller.abort(request.signal.reason)
+    const deadline = setTimeout(() => {
+      controller.abort(new Error('verifier request timed out'))
+    }, this.config.timeoutMs)
+    const abort = () => {
+      controller.abort(request.signal.reason)
+    }
     request.signal.addEventListener('abort', abort, { once: true })
     try {
       const response = await fetch(`${this.config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
@@ -131,7 +135,7 @@ export default class VerifierService extends Service implements VerifierProvider
       return responseValue(value, this.config.maxRationaleBytes)
     } catch (error: unknown) {
       if (error instanceof VerifierError) throw error
-      if (request.signal.aborted) throw request.signal.reason
+      request.signal.throwIfAborted()
       throw new VerifierError('verifier provider request failed', 'REQUEST_FAILED')
     } finally {
       clearTimeout(deadline)

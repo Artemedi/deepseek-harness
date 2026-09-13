@@ -19,7 +19,10 @@ let server: Server | undefined
 afterEach(async () => {
   if (server !== undefined) {
     await new Promise<void>((resolve, reject) => {
-      server!.close(error => error === undefined ? resolve() : reject(error))
+      server!.close((error) => {
+        if (error === undefined) resolve()
+        else reject(error)
+      })
     })
   }
   server = undefined
@@ -29,10 +32,13 @@ describe('automatic TencentDB recall through a real headless AgentLoop', () => {
   it('places logged untrusted memory before the direct prompt in the model request', async () => {
     const requests: Array<{ headers: Record<string, string | string[] | undefined>; body: unknown }> = []
     server = createServer((request, response) => {
-      const chunks: Buffer[] = []
-      request.on('data', chunk => chunks.push(Buffer.from(chunk)))
+      const chunks: string[] = []
+      request.setEncoding('utf8')
+      request.on('data', (chunk: string) => {
+        chunks.push(chunk)
+      })
       request.on('end', () => {
-        requests.push({ headers: request.headers, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown })
+        requests.push({ headers: request.headers, body: JSON.parse(chunks.join('')) as unknown })
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end(JSON.stringify({
           code: 0, message: 'ok', request_id: 'automatic-recall-1',

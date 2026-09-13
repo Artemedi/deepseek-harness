@@ -8,7 +8,6 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
@@ -260,7 +259,7 @@ export default class MemoryService extends Service {
       ['openviking', this.config.openviking === undefined
         ? new StubOpenVikingProvider()
         : new OpenVikingHttpProvider(this.config.openviking, async (ref) => {
-          const credentials = ctx.get('credentials') as CredentialProvider | undefined
+          const credentials = ctx.get('credentials')
           return (await credentials?.resolve(credentialRef(ref)))?.value
         })],
     ])
@@ -275,7 +274,7 @@ export default class MemoryService extends Service {
     }
     if (this.config.tencentdb !== undefined) {
       available.set('tencentdb', new TencentDbHttpProvider(this.config.tencentdb, async (ref) => {
-        const credentials = ctx.get('credentials') as CredentialProvider | undefined
+        const credentials = ctx.get('credentials')
         return (await credentials?.resolve(credentialRef(ref)))?.value
       }))
     }
@@ -322,7 +321,7 @@ export default class MemoryService extends Service {
     const runtime = this.config.tencentdbRuntime
     await this.ctx.inject(['subprocess', 'credentials'], async (runtimeCtx) => {
       await startTencentDbManagedRuntime(runtimeCtx, provider, runtime, async (ref) => {
-        const credentials = runtimeCtx.get('credentials') as CredentialProvider | undefined
+        const credentials = runtimeCtx.get('credentials')
         return (await credentials?.resolve(credentialRef(ref)))?.value
       })
     })
@@ -432,7 +431,7 @@ export default class MemoryService extends Service {
     const state = this.ctx.sessionProjections.stateOf(agent.session, 'memoryCapture')
     if (state === undefined) throw new Error('memory capture projection is not registered')
     for (const { turn, messages } of state.pending) {
-      if (signal.aborted) throw signal.reason
+      signal.throwIfAborted()
       agent.session.append('memory/capture-requested', {
         version: 1, provider: 'tencentdb', turn, messageCount: messages.length,
       })

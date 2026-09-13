@@ -150,15 +150,19 @@ export default class TencentDbHttpProvider implements MemoryProvider {
   async search(request: MemoryProviderSearchRequest): Promise<readonly MemorySearchResult['hits'][number][]> {
     if (request.signal.aborted) throw request.signal.reason
     const controller = new AbortController()
-    const deadline = setTimeout(() => controller.abort(new Error('TencentDB search timed out')), this.config.timeoutMs)
-    const abort = (): void => controller.abort(request.signal.reason)
+    const deadline = setTimeout(() => {
+      controller.abort(new Error('TencentDB search timed out'))
+    }, this.config.timeoutMs)
+    const abort = (): void => {
+      controller.abort(request.signal.reason)
+    }
     request.signal.addEventListener('abort', abort, { once: true })
     try {
       return await this.searchAtDepth({ ...request, signal: controller.signal })
     } catch (error: unknown) {
       if (error instanceof HarnessError) throw error
-      if (request.signal.aborted) throw request.signal.reason
-      if (controller.signal.aborted) throw new HarnessError('TencentDB search timed out', 'MEMORY_RETRYABLE')
+      request.signal.throwIfAborted()
+      if (isSignalAborted(controller.signal)) throw new HarnessError('TencentDB search timed out', 'MEMORY_RETRYABLE')
       throw error
     } finally {
       clearTimeout(deadline)
@@ -191,20 +195,26 @@ export default class TencentDbHttpProvider implements MemoryProvider {
     if (request.signal.aborted) throw request.signal.reason
     const sessionId = typeof request.sessionId === 'string' ? request.sessionId.trim() : ''
     if (sessionId.length === 0) throw new HarnessError('TencentDB capture sessionId must not be empty', 'MEMORY_INVALID_REQUEST')
-    if (!Array.isArray(request.messages) || request.messages.length === 0) throw new HarnessError('TencentDB capture messages must not be empty', 'MEMORY_INVALID_REQUEST')
-    if (request.messages.length > MAX_CAPTURE_MESSAGES) throw new HarnessError('TencentDB capture exceeds the message count limit', 'MEMORY_INVALID_REQUEST')
-    for (const [index, message] of request.messages.entries()) {
-      if ((message.role !== 'user' && message.role !== 'assistant') || typeof message.content !== 'string' || message.content.trim().length === 0) {
+    const messages: unknown = request.messages
+    if (!isUnknownArray(messages) || messages.length === 0) throw new HarnessError('TencentDB capture messages must not be empty', 'MEMORY_INVALID_REQUEST')
+    if (messages.length > MAX_CAPTURE_MESSAGES) throw new HarnessError('TencentDB capture exceeds the message count limit', 'MEMORY_INVALID_REQUEST')
+    const normalizedMessages: MemoryCaptureMessage[] = []
+    for (const [index, message] of messages.entries()) {
+      if (!isRecord(message)
+        || (message.role !== 'user' && message.role !== 'assistant')
+        || typeof message.content !== 'string'
+        || message.content.trim().length === 0) {
         throw new HarnessError(`TencentDB capture message ${String(index)} is malformed`, 'MEMORY_INVALID_REQUEST')
       }
       if (message.content.length > MAX_CAPTURE_CONTENT_LENGTH) {
         throw new HarnessError(`TencentDB capture message ${String(index)} exceeds the content length limit`, 'MEMORY_INVALID_REQUEST')
       }
+      normalizedMessages.push({ role: message.role, content: message.content })
     }
     const payload = {
       ...this.isolation(request),
       session_id: sessionId,
-      messages: request.messages,
+      messages: normalizedMessages,
     }
     const body = JSON.stringify(payload)
     if (Buffer.byteLength(body, 'utf8') > MAX_CAPTURE_BYTES) {
@@ -215,9 +225,9 @@ export default class TencentDbHttpProvider implements MemoryProvider {
     const data = envelopeData(value)
     if (!Array.isArray(data.accepted_ids) || !data.accepted_ids.every(id => typeof id === 'string' && id.length > 0)
       || !Array.isArray(data.accepted_versions) || !data.accepted_versions.every(version => typeof version === 'string' && version.length > 0)
-      || data.accepted_ids.length !== request.messages.length
-      || data.accepted_versions.length !== request.messages.length
-      || data.total_count !== request.messages.length) {
+      || data.accepted_ids.length !== normalizedMessages.length
+      || data.accepted_versions.length !== normalizedMessages.length
+      || data.total_count !== normalizedMessages.length) {
       throw malformed('TencentDB capture response is malformed')
     }
   }
@@ -261,8 +271,12 @@ export default class TencentDbHttpProvider implements MemoryProvider {
     const authHeaders = await this.resolveAuthHeaders()
     if (signal.aborted) throw signal.reason
     const controller = new AbortController()
-    const deadline = setTimeout(() => controller.abort(new Error('TencentDB request timed out')), this.config.timeoutMs)
-    const abort = (): void => controller.abort(signal.reason)
+    const deadline = setTimeout(() => {
+      controller.abort(new Error('TencentDB request timed out'))
+    }, this.config.timeoutMs)
+    const abort = (): void => {
+      controller.abort(signal.reason)
+    }
     signal.addEventListener('abort', abort, { once: true })
     try {
       const response = await fetch(`${this.config.baseUrl}${path}`, {
@@ -274,8 +288,8 @@ export default class TencentDbHttpProvider implements MemoryProvider {
       return parseSuccessEnvelope(await readBoundedResponseText(response, this.config.maxResponseBytes, 'TencentDB'))
     } catch (error: unknown) {
       if (error instanceof HarnessError) throw error
-      if (signal.aborted) throw signal.reason
-      if (controller.signal.aborted) throw new HarnessError('TencentDB request timed out', 'MEMORY_RETRYABLE')
+      signal.throwIfAborted()
+      if (isSignalAborted(controller.signal)) throw new HarnessError('TencentDB request timed out', 'MEMORY_RETRYABLE')
       throw new HarnessError('TencentDB provider request failed', 'MEMORY_PROVIDER_UNAVAILABLE')
     } finally {
       clearTimeout(deadline)
@@ -364,8 +378,16 @@ function malformed(message: string): HarnessError {
 }
 
 function findRecords(value: Record<string, unknown>): readonly unknown[] | undefined {
-  if (isRecord(value.data) && Array.isArray(value.data.items)) return value.data.items
+  if (isRecord(value.data) && isUnknownArray(value.data.items)) return value.data.items
   return undefined
+}
+
+function isSignalAborted(signal: AbortSignal): boolean {
+  return signal.aborted
+}
+
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

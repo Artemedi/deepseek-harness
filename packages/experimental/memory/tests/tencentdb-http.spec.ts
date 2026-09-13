@@ -16,6 +16,16 @@ const response = (items: unknown, code = 0) => new Response(JSON.stringify({ cod
   status: 200, headers: { 'content-type': 'application/json' },
 })
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  return input instanceof URL ? input.href : input.url
+}
+
+function requestBody(init: RequestInit | undefined): string {
+  if (typeof init?.body !== 'string') throw new TypeError('expected a string request body')
+  return init.body
+}
+
 function provider(resolveCredential: (ref: string) => Promise<string | undefined> = async ref => ref === 'TENCENT_KEY' ? 'secret-value' : undefined) {
   return new TencentDbHttpProvider({
     baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
@@ -40,11 +50,11 @@ describe('TencentDbHttpProvider', () => {
 
   it('sends an explicit scoped v3 search and normalizes bounded citations', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe('https://memory.example/v3/atomic/search')
+      expect(requestUrl(input)).toBe('https://memory.example/v3/atomic/search')
       expect(init?.method).toBe('POST')
       expect(init?.redirect).toBe('error')
       expect(init?.headers).toMatchObject({ Authorization: 'Bearer secret-value', 'x-tdai-service-id': 'memory-1' })
-      expect(JSON.parse(String(init?.body))).toEqual({
+      expect(JSON.parse(requestBody(init))).toEqual({
         team_id: 'team-1', agent_id: 'agent-1', user_id: 'user-1', query: 'retry', limit: 2,
       })
       return response([{ id: 'opaque-1', type: 'preference', content: 'evidence', background: 'chat', score: 0.9 }])
@@ -57,7 +67,7 @@ describe('TencentDbHttpProvider', () => {
 
   it('selects only the exact workspace and agent-preset binding before any HTTP request', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(JSON.parse(String(init?.body))).toMatchObject({
+      expect(JSON.parse(requestBody(init))).toMatchObject({
         team_id: 'team-2', agent_id: 'agent-2', user_id: 'user-2',
       })
       return response([])
@@ -131,8 +141,8 @@ describe('TencentDbHttpProvider', () => {
 
   it('retrieves only query-matched L2 scenarios through bounded list and read calls', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = new URL(String(input)).pathname
-      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      const path = new URL(requestUrl(input)).pathname
+      const body = JSON.parse(requestBody(init)) as Record<string, unknown>
       expect(body).toMatchObject({ team_id: 'team-1', agent_id: 'agent-1', user_id: 'user-1' })
       if (path === '/v3/scenario/ls') {
         return new Response(JSON.stringify({ code: 0, data: { entries: [
@@ -157,8 +167,8 @@ describe('TencentDbHttpProvider', () => {
   it('handles null and untitled L2 profiles and rejects malformed scenario data', async () => {
     const reads: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = new URL(String(input)).pathname
-      const body = JSON.parse(String(init?.body)) as { path?: string }
+      const path = new URL(requestUrl(input)).pathname
+      const body = JSON.parse(requestBody(init)) as { path?: string }
       if (path === '/v3/scenario/ls') {
         return new Response(JSON.stringify({ code: 0, data: { entries: [
           { path: '', summary: 'retry' },
@@ -186,7 +196,7 @@ describe('TencentDbHttpProvider', () => {
 
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => new Response(JSON.stringify({
       code: 0,
-      data: String(input).endsWith('/v3/scenario/ls')
+      data: requestUrl(input).endsWith('/v3/scenario/ls')
         ? { entries: [{ path: 'retry.md', summary: 'retry' }] }
         : { content: 42 },
     }), { status: 200 })))
@@ -198,18 +208,23 @@ describe('TencentDbHttpProvider', () => {
     vi.useFakeTimers()
     let reads = 0
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith('/v3/scenario/ls')) {
+      if (requestUrl(input).endsWith('/v3/scenario/ls')) {
         return new Response(JSON.stringify({ code: 0, data: { entries: [
           { path: 'retry-a.md', summary: 'retry a' }, { path: 'retry-b.md', summary: 'retry b' },
         ] } }), { status: 200 })
       }
       reads += 1
       if (reads === 1) {
-        return new Promise(resolve => setTimeout(() => resolve(new Response(JSON.stringify({
-          code: 0, data: { content: 'first' },
-        }), { status: 200 })), 20))
+        return new Promise(resolve => setTimeout(() => {
+          resolve(new Response(JSON.stringify({
+            code: 0, data: { content: 'first' },
+          }), { status: 200 }))
+        }, 20))
       }
-      return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true }))
+      return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => {
+        const reason: unknown = init.signal?.reason
+        reject(reason instanceof Error ? reason : new Error('request aborted', { cause: reason }))
+      }, { once: true }))
     }))
     const timed = new TencentDbHttpProvider({
       baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
@@ -244,7 +259,7 @@ describe('TencentDbHttpProvider', () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({ 'x-tdai-service-id': 'memory-1', 'Content-Type': 'application/json' })
       expect(init?.headers).toMatchObject({ Authorization: 'Bearer dsh-local-loopback' })
-      return String(_input).endsWith('/v3/atomic/search')
+      return requestUrl(_input).endsWith('/v3/atomic/search')
         ? response([])
         : new Response(JSON.stringify({
           code: 0, message: 'ok',
@@ -342,7 +357,9 @@ describe('TencentDbHttpProvider', () => {
 
   it('maps timeout and rejects malformed records without exposing the secret', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Promise<Response>((_resolve, reject) => {
-      setTimeout(() => reject(new Error('network')), 30)
+      setTimeout(() => {
+        reject(new Error('network'))
+      }, 30)
     })))
     const timed = new TencentDbHttpProvider({
       baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',
@@ -368,11 +385,16 @@ describe('TencentDbHttpProvider', () => {
   it('propagates active cancellation and maps ordinary transport failures', async () => {
     const controller = new AbortController()
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+      init?.signal?.addEventListener('abort', () => {
+        const reason: unknown = init.signal?.reason
+        reject(reason instanceof Error ? reason : new Error('request aborted', { cause: reason }))
+      }, { once: true })
     }))
     vi.stubGlobal('fetch', fetchMock)
     const pending = provider().search(request(controller.signal))
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledOnce()
+    })
     controller.abort(new Error('active cancellation'))
     await expect(pending).rejects.toThrow('active cancellation')
 
@@ -391,14 +413,16 @@ describe('TencentDbHttpProvider', () => {
     }, resolveCredential)
     const controller = new AbortController()
     const pending = scoped.search(request(controller.signal))
-    await vi.waitFor(() => expect(resolveCredential).toHaveBeenCalledOnce())
+    await vi.waitFor(() => {
+      expect(resolveCredential).toHaveBeenCalledOnce()
+    })
     controller.abort(new Error('cancelled during credentials'))
     releaseCredential('secret')
     await expect(pending).rejects.toThrow('cancelled during credentials')
   })
 
   it('rejects unsupported depth and a non-absolute caller workspace', async () => {
-    await expect(provider().search({ ...request(), depth: 'L0' as 'L1' }))
+    await expect(provider().search({ ...request(), depth: 'L0' }))
       .rejects.toMatchObject({ code: 'MEMORY_INVALID_REQUEST' })
     await expect(provider().search({ ...request(), workspace: 'relative/path' }))
       .rejects.toMatchObject({ code: 'MEMORY_UNAUTHORIZED' })
@@ -406,12 +430,12 @@ describe('TencentDbHttpProvider', () => {
 
   it('captures a scoped DSH session through the v3 conversation route', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe('https://memory.example/v3/conversation/add')
+      expect(requestUrl(input)).toBe('https://memory.example/v3/conversation/add')
       expect(init).toMatchObject({ method: 'POST', redirect: 'error' })
       expect(init?.headers).toMatchObject({
         Authorization: 'Bearer secret-value', 'x-tdai-service-id': 'memory-1', 'Content-Type': 'application/json',
       })
-      expect(JSON.parse(String(init?.body))).toEqual({
+      expect(JSON.parse(requestBody(init))).toEqual({
         team_id: 'team-1', agent_id: 'agent-1', user_id: 'user-1', session_id: 'dsh-session-1',
         messages: [{ role: 'user', content: 'remember this' }, { role: 'assistant', content: 'noted' }],
       })
@@ -456,7 +480,9 @@ describe('TencentDbHttpProvider', () => {
     await expect(provider().capture(capture({ signal: cancelled.signal }))).rejects.toThrow('capture cancelled')
 
     vi.stubGlobal('fetch', vi.fn(async () => new Promise<Response>((_resolve, reject) => {
-      setTimeout(() => reject(new Error('network')), 30)
+      setTimeout(() => {
+        reject(new Error('network'))
+      }, 30)
     })))
     const timed = new TencentDbHttpProvider({
       baseUrl: 'https://memory.example', credentialRef: 'TENCENT_KEY', serviceId: 'memory-1',

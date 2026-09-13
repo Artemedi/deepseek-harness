@@ -59,7 +59,7 @@ kind: "package-reference"
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Tool schema、execution、durable observation 与 JSON rendering |
-| [`src/invariant.ts`](src/invariant.ts) | 已注册 tool 的 composition invariant |
+| — | 不发布 runtime invariant companion；memory service 负责持久 memory-event 关系，标准 tool runtime 负责 call/result 配对。 |
 
 </details>
 

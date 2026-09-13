@@ -59,7 +59,7 @@ The tool forwards validated arguments and the execution signal to `ctx.memory.se
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Tool schema, execution, durable observation, and JSON rendering |
-| [`src/invariant.ts`](src/invariant.ts) | Composition invariant for the registered tool |
+| — | No runtime invariant companion is published; the memory service owns durable memory-event relations and the standard tool runtime owns call/result pairing. |
 
 </details>
 

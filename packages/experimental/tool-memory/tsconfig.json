@@ -10,7 +10,6 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/agent" },
     { "path": "../../core/tools" },
-    { "path": "../../runtime-diagnostics/invariants" },
     { "path": "../memory" }
   ]
 }

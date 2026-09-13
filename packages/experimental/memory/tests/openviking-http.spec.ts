@@ -9,6 +9,16 @@ const response = (result: unknown) => new Response(JSON.stringify({ result }), {
   status: 200, headers: { 'content-type': 'application/json' },
 })
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  return input instanceof URL ? input.href : input.url
+}
+
+function requestBody(init: RequestInit | undefined): string {
+  if (typeof init?.body !== 'string') throw new TypeError('expected a string request body')
+  return init.body
+}
+
 function provider(resolveCredential: (ref: string) => Promise<string | undefined> = async ref => ref === 'OPENVIKING_KEY' ? 'secret-value' : undefined) {
   return new OpenVikingHttpProvider({ baseUrl: 'https://viking.example', credentialRef: 'OPENVIKING_KEY', targetUri: 'viking://workspace/a' }, resolveCredential)
 }
@@ -29,11 +39,11 @@ describe('OpenVikingHttpProvider', () => {
 
   it('sends the confirmed find envelope and maps bounded records at requested depth', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe('https://viking.example/api/v1/search/find')
+      expect(requestUrl(input)).toBe('https://viking.example/api/v1/search/find')
       expect(init?.method).toBe('POST')
       expect(init?.redirect).toBe('error')
       expect(init?.headers).toMatchObject({ Authorization: 'Bearer secret-value', 'X-API-Key': 'secret-value' })
-      expect(JSON.parse(String(init?.body))).toEqual({ query: 'retry', limit: 2, target_uri: 'viking://workspace/a' })
+      expect(JSON.parse(requestBody(init))).toEqual({ query: 'retry', limit: 2, target_uri: 'viking://workspace/a' })
       return response({ memories: [{ uri: 'viking://workspace/a/retry', abstract: 'retry evidence', title: 'Retry' }] })
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -78,11 +88,16 @@ describe('OpenVikingHttpProvider', () => {
   it('propagates active cancellation and maps an ordinary transport failure', async () => {
     const controller = new AbortController()
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+      init?.signal?.addEventListener('abort', () => {
+        const reason: unknown = init.signal?.reason
+        reject(reason instanceof Error ? reason : new Error('request aborted', { cause: reason }))
+      }, { once: true })
     }))
     vi.stubGlobal('fetch', fetchMock)
     const pending = provider().search(request('L1', controller.signal))
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce())
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledOnce()
+    })
     controller.abort(new Error('active cancellation'))
     await expect(pending).rejects.toThrow('active cancellation')
 
@@ -92,10 +107,12 @@ describe('OpenVikingHttpProvider', () => {
 
   it('maps timeout and rejects malformed records without exposing the secret', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Promise<Response>((_resolve, reject) => {
-      setTimeout(() => reject(new Error('network')), 30)
+      setTimeout(() => {
+        reject(new Error('network'))
+      }, 30)
     })))
     const timed = new OpenVikingHttpProvider({ baseUrl: 'https://viking.example', credentialRef: 'OPENVIKING_KEY', timeoutMs: 1 }, async () => 'secret-value')
-    const error = await timed.search(request()).catch(value => value as Error & { code?: string })
+    const error = await timed.search(request()).catch((value: unknown) => value as Error & { code?: string })
     expect(error).toMatchObject({ code: 'MEMORY_RETRYABLE' })
     expect(error instanceof Error).toBe(true)
     expect((error as Error).message).not.toContain('secret-value')

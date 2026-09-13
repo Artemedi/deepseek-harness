@@ -8,6 +8,11 @@ const response = (value: unknown, status = 200): Response => new Response(JSON.s
   choices: [{ message: { content: JSON.stringify(value) } }],
 }), { status, headers: { 'content-type': 'application/json' } })
 
+function requestBody(init: RequestInit | undefined): string {
+  if (typeof init?.body !== 'string') throw new TypeError('expected a string request body')
+  return init.body
+}
+
 async function setup(seed: Record<string, string> = { MISTRAL_API_KEY: 'test-key' }): Promise<{ ctx: Context; service: VerifierService }> {
   const ctx = new Context()
   const agents = ctx.plugin(AgentRegistry)
@@ -34,7 +39,7 @@ describe('VerifierService', () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       expect(init?.redirect).toBe('error')
       expect(init?.headers).toMatchObject({ Authorization: 'Bearer test-key' })
-      const body = JSON.parse(String(init?.body)) as { model: string; max_tokens: number; response_format: unknown }
+      const body = JSON.parse(requestBody(init)) as { model: string; max_tokens: number; response_format: unknown }
       expect(body.model).toBe('mistral-small-2603')
       expect(body.max_tokens).toBe(64)
       expect(body.response_format).toMatchObject({ type: 'json_schema' })

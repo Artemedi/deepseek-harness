@@ -3,7 +3,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SubprocessHandle, SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
+import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { TencentDbHttpConfig } from './tencentdb-http.ts'
 
@@ -62,7 +62,7 @@ export async function startTencentDbManagedRuntime(
 ): Promise<void> {
   const endpoint = managedEndpoint(provider.baseUrl)
   const resolved = resolveRuntimeConfig(config)
-  const subprocess = ctx.get('subprocess') as SubprocessRuntime | undefined
+  const subprocess = ctx.get('subprocess')
   if (subprocess === undefined) {
     throw new HarnessError('managed TencentDB MemoryCore requires a subprocess provider', 'MEMORY_INVALID_REQUEST')
   }
@@ -213,7 +213,7 @@ async function waitForHealth(
   const deadline = Date.now() + config.startupTimeoutMs
   const exit = handle.done.then(
     outcome => ({ kind: 'exit' as const, outcome }),
-    error => ({ kind: 'failure' as const, error }),
+    (error: unknown) => ({ kind: 'failure' as const, error }),
   )
   while (Date.now() < deadline) {
     signal.throwIfAborted()
@@ -269,7 +269,8 @@ function abortableDelay(milliseconds: number, signal: AbortSignal): Promise<void
     }
     function aborted(): void {
       clearTimeout(timer)
-      reject(signal.reason)
+      const reason: unknown = signal.reason
+      reject(reason instanceof Error ? reason : new Error('managed TencentDB MemoryCore setup aborted', { cause: reason }))
     }
     signal.addEventListener('abort', aborted, { once: true })
   })

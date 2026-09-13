@@ -1,9 +1,8 @@
-import { createServer } from 'node:net'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
@@ -28,6 +27,7 @@ let context: Context | undefined
 afterEach(async () => {
   await context?.fiber.dispose()
   context = undefined
+  vi.unstubAllGlobals()
   if (root !== undefined) await rm(root, { recursive: true, force: true })
   root = undefined
 })
@@ -35,15 +35,21 @@ afterEach(async () => {
 describe('managed TencentDB MemoryCore real Loader composition', () => {
   it('waits for a local child health endpoint and kills the process tree on disposal', async () => {
     root = await mkdtemp(join(tmpdir(), 'dsh-memory-runtime-loader-'))
-    const port = await reservePort()
+    const portFile = join(root, 'data', 'port')
     const childPath = join(root, 'memory-core-fixture.mjs')
     await writeFile(childPath, [
+      "import { mkdir, writeFile } from 'node:fs/promises'",
       "import { createServer } from 'node:http'",
+      "import { join } from 'node:path'",
       'const server = createServer((request, response) => {',
       "  if (request.url === '/health') { response.writeHead(200, { 'content-type': 'application/json' }); response.end('{\"status\":\"ok\"}'); return }",
       '  response.writeHead(404); response.end()',
       '})',
-      'server.listen(Number(process.env.TDAI_GATEWAY_PORT), process.env.TDAI_GATEWAY_HOST)',
+      "await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })",
+      'const address = server.address()',
+      "if (address === null || typeof address === 'string') throw new Error('fixture server has no TCP port')",
+      'await mkdir(process.env.TDAI_DATA_DIR, { recursive: true })',
+      "await writeFile(join(process.env.TDAI_DATA_DIR, 'port'), String(address.port))",
       "process.on('SIGTERM', () => server.close())",
       '',
     ].join('\n'))
@@ -57,7 +63,7 @@ describe('managed TencentDB MemoryCore real Loader composition', () => {
       '  config:',
       '    providers: [local, tencentdb]',
       '    tencentdb:',
-      `      baseUrl: http://127.0.0.1:${String(port)}`,
+      '      baseUrl: http://127.0.0.1:1',
       '      serviceId: default',
       '      isolationBindings:',
       `        - workspace: ${JSON.stringify(root)}`,
@@ -82,6 +88,13 @@ describe('managed TencentDB MemoryCore real Loader composition', () => {
 
     const ctx = new Context()
     context = ctx
+    const realFetch = globalThis.fetch
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url !== 'http://127.0.0.1:1/health') return realFetch(input, init)
+      await readFile(portFile, 'utf8')
+      return new Response('{"status":"ok"}', { status: 200, headers: { 'content-type': 'application/json' } })
+    })
     ctx.baseUrl = pathToFileURL(root).href + '/'
     await ctx.plugin(Loader)
     ctx.loader.builtins.include = Include
@@ -104,21 +117,11 @@ describe('managed TencentDB MemoryCore real Loader composition', () => {
     await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
     await ctx.loader.await()
 
-    await expect(fetch(`http://127.0.0.1:${String(port)}/health`)).resolves.toMatchObject({ status: 200 })
+    const port = Number(await readFile(portFile, 'utf8'))
+    expect(Number.isSafeInteger(port) && port > 0).toBe(true)
+    await expect(realFetch(`http://127.0.0.1:${String(port)}/health`)).resolves.toMatchObject({ status: 200 })
     await ctx.fiber.dispose()
     context = undefined
-    await expect(fetch(`http://127.0.0.1:${String(port)}/health`)).rejects.toThrow()
+    await expect(realFetch(`http://127.0.0.1:${String(port)}/health`)).rejects.toThrow()
   }, 30_000)
 })
-
-async function reservePort(): Promise<number> {
-  const server = createServer()
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', resolve)
-  })
-  const address = server.address()
-  if (address === null || typeof address === 'string') throw new Error('test port allocation failed')
-  await new Promise<void>((resolve, reject) => server.close(error => error === undefined ? resolve() : reject(error)))
-  return address.port
-}

@@ -59,8 +59,12 @@ export default class OpenVikingHttpProvider implements MemoryProvider {
       throw new HarnessError('OpenViking credential is not configured', 'MEMORY_UNAUTHORIZED')
     }
     const controller = new AbortController()
-    const deadline = setTimeout(() => controller.abort(new Error('OpenViking request timed out')), this.config.timeoutMs)
-    const abort = () => controller.abort(request.signal.reason)
+    const deadline = setTimeout(() => {
+      controller.abort(new Error('OpenViking request timed out'))
+    }, this.config.timeoutMs)
+    const abort = () => {
+      controller.abort(request.signal.reason)
+    }
     request.signal.addEventListener('abort', abort, { once: true })
     try {
       const response = await fetch(`${this.config.baseUrl}/api/v1/search/find`, {
@@ -77,14 +81,18 @@ export default class OpenVikingHttpProvider implements MemoryProvider {
       return normalizeOpenVikingRecords(parseRecords(raw, depth), depth, request)
     } catch (error: unknown) {
       if (error instanceof HarnessError) throw error
-      if (request.signal.aborted) throw request.signal.reason
-      if (controller.signal.aborted) throw new HarnessError('OpenViking request timed out', 'MEMORY_RETRYABLE')
+      request.signal.throwIfAborted()
+      if (isSignalAborted(controller.signal)) throw new HarnessError('OpenViking request timed out', 'MEMORY_RETRYABLE')
       throw new HarnessError('OpenViking provider request failed', 'MEMORY_PROVIDER_UNAVAILABLE')
     } finally {
       clearTimeout(deadline)
       request.signal.removeEventListener('abort', abort)
     }
   }
+}
+
+function isSignalAborted(signal: AbortSignal): boolean {
+  return signal.aborted
 }
 
 function parseRecords(raw: string, depth: OpenVikingDepth): readonly OpenVikingRecord[] {

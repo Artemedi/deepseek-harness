@@ -6,7 +6,6 @@
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/tools" },
-    { "path": "../../runtime-diagnostics/invariants" },
     { "path": "../verifier" }
   ]
 }

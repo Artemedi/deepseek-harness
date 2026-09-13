@@ -30,7 +30,7 @@ This opt-in layer adds the experimental JSON verifier service and `verify_pair` 
 From a built source checkout, install the local package into the selected profile and remove it by package name:
 
 ```text
-pnpm dsh plugin --profile web add ./packages/bundle/experimental-verifier
+pnpm dsh plugin --profile web add ./packages/experimental/verifier-bundle
 pnpm dsh plugin --profile web remove @deepseek-ai/dsh-experimental-verifier-bundle
 ```
 
@@ -48,13 +48,13 @@ The layer inserts `experimental-verifier`, configured for the bounded Mistral-co
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package is a static two-row patch carrier. Profile reconciliation applies [`cordis.patch.yml`](cordis.patch.yml); later profile or user rows with the same ids replace these complete configurations. The TypeScript entry has no runtime behavior, and each inserted package owns its service, tool, and invariants.
+The package is a static two-row patch carrier. Profile reconciliation applies [`cordis.patch.yml`](cordis.patch.yml); later profile or user rows with the same ids replace these complete configurations. The TypeScript entry has no runtime behavior, and each inserted package owns its service or tool contract.
 
 | File | Role |
 |---|---|
 | [`cordis.patch.yml`](cordis.patch.yml) | Verifier service and tool rows with bounded defaults |
 | [`src/index.ts`](src/index.ts) | Empty bundle entry |
-| [`src/invariant.ts`](src/invariant.ts) | Static bundle composition invariant |
+| — | No runtime invariant companion is published; the static patch holds no events or mutable runtime relation to cross-check. |
 
 </details>
 
@@ -63,9 +63,9 @@ The package is a static two-row patch carrier. Profile reconciliation applies [`
 <a id="further-exploration"></a>
 ## Further Exploration
 
-- [Verifier service](../../experimental/verifier/README.md) — provider and validation contract.
-- [Verifier tool](../../experimental/tool-verifier/README.md) — model-facing schema and boundary.
-- [Bundle package map](../README.md) — shipped and optional profile layers.
+- [Verifier service](../verifier/README.md) — provider and validation contract.
+- [Verifier tool](../tool-verifier/README.md) — model-facing schema and boundary.
+- [Package map](../../README.md) — workspace package inventory.
 - [Generated composition graph](../../../apps/cli/composition.md) — current profile rows.
 
 -----

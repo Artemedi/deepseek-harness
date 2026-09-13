@@ -64,7 +64,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 |---|---|
 | [`src/index.ts`](src/index.ts) | Configuration, credential lookup, request boundary, and response validation |
 | [`src/types.ts`](src/types.ts) | Provider-neutral comparison request and result types |
-| [`src/invariant.ts`](src/invariant.ts) | Runtime service invariant |
+| — | No runtime invariant companion is published; each comparison returns one validated immutable result without package-owned durable state. |
 
 </details>
 
@@ -75,7 +75,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 - [Credentials subsystem](../../credentials/README.md) — secret resolution boundary.
 - [Verifier tool](../tool-verifier/README.md) — explicit model-facing consumer.
-- [Experimental verifier bundle](../../bundle/experimental-verifier/README.md) — opt-in profile layer.
+- [Experimental verifier bundle](../verifier-bundle/README.md) — opt-in profile layer.
 - [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-verifier) — exact defaults and bounds.
 
 -----

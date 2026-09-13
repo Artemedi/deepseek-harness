@@ -3635,7 +3635,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-experimental-client-ui-agent-team` ([`packages/experimental/client-ui-agent-team/src/index.ts`](../packages/experimental/client-ui-agent-team/src/index.ts))
 - `@deepseek-ai/dsh-experimental-tool-memory` — requires `memory` · `tools` ([`packages/experimental/tool-memory/src/index.ts`](../packages/experimental/tool-memory/src/index.ts))
 - `@deepseek-ai/dsh-experimental-tool-verifier` — requires `tools` · `verifier` ([`packages/experimental/tool-verifier/src/index.ts`](../packages/experimental/tool-verifier/src/index.ts))
-- `@deepseek-ai/dsh-experimental-verifier-bundle` ([`packages/bundle/experimental-verifier/src/index.ts`](../packages/bundle/experimental-verifier/src/index.ts))
+- `@deepseek-ai/dsh-experimental-verifier-bundle` ([`packages/experimental/verifier-bundle/src/index.ts`](../packages/experimental/verifier-bundle/src/index.ts))
 - `@deepseek-ai/dsh-fs-e2b` — requires `e2b` ([`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts))
 - `@deepseek-ai/dsh-fs-observation-policy` ([`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts))
 - `@deepseek-ai/dsh-goal-round-driver` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts))

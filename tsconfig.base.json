@@ -125,10 +125,6 @@
       "@deepseek-ai/dsh-agent-loop/invariant": ["./packages/core/agent-loop/src/invariant.ts"],
       "@deepseek-ai/dsh-experimental-agent-team/invariant": ["./packages/experimental/agent-team/src/invariant.ts"],
       "@deepseek-ai/dsh-experimental-memory/invariant": ["./packages/experimental/memory/src/invariant.ts"],
-      "@deepseek-ai/dsh-experimental-tool-memory/invariant": ["./packages/experimental/tool-memory/src/invariant.ts"],
-      "@deepseek-ai/dsh-experimental-tool-verifier/invariant": ["./packages/experimental/tool-verifier/src/invariant.ts"],
-      "@deepseek-ai/dsh-experimental-verifier-bundle/invariant": ["./packages/bundle/experimental-verifier/src/invariant.ts"],
-      "@deepseek-ai/dsh-experimental-verifier/invariant": ["./packages/experimental/verifier/src/invariant.ts"],
       // host/client package names prefix the group dir (dsh-client-<dir>), so
       // the generated aliases below — which map a package only when its name is
       // exactly dsh-<dir> — skip them; strip the group prefix with a dedicated
@@ -248,7 +244,7 @@
       "@deepseek-ai/dsh-experimental-tool-memory": ["./packages/experimental/tool-memory/src"],
       "@deepseek-ai/dsh-experimental-tool-verifier": ["./packages/experimental/tool-verifier/src"],
       "@deepseek-ai/dsh-experimental-verifier": ["./packages/experimental/verifier/src"],
-      "@deepseek-ai/dsh-experimental-verifier-bundle": ["./packages/bundle/experimental-verifier/src"],
+      "@deepseek-ai/dsh-experimental-verifier-bundle": ["./packages/experimental/verifier-bundle/src"],
       "@deepseek-ai/dsh-experimental-webworker-runtime": ["./packages/experimental/webworker-runtime/src"],
       "@deepseek-ai/dsh-experimental-webworker-packer": ["./packages/experimental/webworker-packer/src"],
       "@deepseek-ai/dsh-experimental-inspector": ["./packages/experimental/inspector/src"],

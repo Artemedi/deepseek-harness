@@ -30,7 +30,7 @@ kind: "package-bundle"
 在已构建的 source checkout 中，把 local package 安装到所选 profile，并按 package name 移除：
 
 ```text
-pnpm dsh plugin --profile web add ./packages/bundle/experimental-verifier
+pnpm dsh plugin --profile web add ./packages/experimental/verifier-bundle
 pnpm dsh plugin --profile web remove @deepseek-ai/dsh-experimental-verifier-bundle
 ```
 
@@ -48,13 +48,13 @@ Profile-local dependency graph 使两个 private experimental package 均可解�
 <details>
 <summary>实现内部机制——点击展开</summary>
 
-该 package 是静态双 row patch carrier。Profile reconciliation 应用 [`cordis.patch.yml`](cordis.patch.yml)；后续具有相同 id 的 profile 或 user row 会替换完整 configuration。TypeScript entry 没有 runtime behavior，每个 inserted package 负责自身 service、tool 与 invariant。
+该 package 是静态双 row patch carrier。Profile reconciliation 应用 [`cordis.patch.yml`](cordis.patch.yml)；后续具有相同 id 的 profile 或 user row 会替换完整 configuration。TypeScript entry 没有 runtime behavior，每个 inserted package 负责自身 service 或 tool contract。
 
 | 文件 | 作用 |
 |---|---|
 | [`cordis.patch.yml`](cordis.patch.yml) | 带有界 default 的 verifier service 与 tool row |
 | [`src/index.ts`](src/index.ts) | 空 bundle entry |
-| [`src/invariant.ts`](src/invariant.ts) | 静态 bundle composition invariant |
+| — | 不发布 runtime invariant companion；静态 patch 不持有可供交叉检查的 event 或 mutable runtime relation。 |
 
 </details>
 
@@ -63,9 +63,9 @@ Profile-local dependency graph 使两个 private experimental package 均可解�
 <a id="further-exploration"></a>
 ## 进一步探索
 
-- [Verifier service](../../experimental/verifier/README.zh.md) — provider 与 validation contract。
-- [Verifier tool](../../experimental/tool-verifier/README.zh.md) — model-facing schema 与 boundary。
-- [Bundle package map](../README.zh.md) — shipped 与 optional profile layer。
+- [Verifier service](../verifier/README.zh.md) — provider 与 validation contract。
+- [Verifier tool](../tool-verifier/README.zh.md) — model-facing schema 与 boundary。
+- [Package map](../../README.zh.md) — workspace package inventory。
 - [Generated composition graph](../../../apps/cli/composition.md) — 当前 profile row。
 
 -----

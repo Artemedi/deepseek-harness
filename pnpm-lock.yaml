@@ -1608,22 +1608,6 @@ importers:
         specifier: workspace:^
         version: link:../../../vendor/cordis
 
-  packages/bundle/experimental-verifier:
-    dependencies:
-      '@deepseek-ai/dsh-experimental-tool-verifier':
-        specifier: workspace:^
-        version: link:../../experimental/tool-verifier
-      '@deepseek-ai/dsh-experimental-verifier':
-        specifier: workspace:^
-        version: link:../../experimental/verifier
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:^
-        version: link:../../../vendor/cordis
-      '@deepseek-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
-
   packages/bundle/headless:
     dependencies:
       '@deepseek-ai/dsh-brand':
@@ -5764,9 +5748,6 @@ importers:
       '@deepseek-ai/dsh-experimental-memory':
         specifier: workspace:^
         version: link:../memory
-      '@deepseek-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -5795,9 +5776,6 @@ importers:
       '@deepseek-ai/dsh-experimental-verifier':
         specifier: workspace:^
         version: link:../verifier
-      '@deepseek-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt
@@ -5817,9 +5795,19 @@ importers:
       '@deepseek-ai/dsh-credentials':
         specifier: workspace:^
         version: link:../../credentials/credentials
-      '@deepseek-ai/dsh-invariants':
+
+  packages/experimental/verifier-bundle:
+    dependencies:
+      '@deepseek-ai/dsh-experimental-tool-verifier':
         specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
+        version: link:../tool-verifier
+      '@deepseek-ai/dsh-experimental-verifier':
+        specifier: workspace:^
+        version: link:../verifier
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
 
   packages/experimental/webworker-packer:
     dependencies:

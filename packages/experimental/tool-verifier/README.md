@@ -59,7 +59,7 @@ The plugin registers one typed tool. Execution maps its five string arguments to
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Tool schema, verifier call, and compact JSON result |
-| [`src/invariant.ts`](src/invariant.ts) | Composition invariant for the registered tool |
+| — | No runtime invariant companion is published; the verifier returns one immutable result and the standard tool runtime owns durable call/result pairing. |
 
 </details>
 
@@ -70,7 +70,7 @@ The plugin registers one typed tool. Execution maps its five string arguments to
 
 - [Verifier service](../verifier/README.md) — provider, credential, bounds, and validation.
 - [Tool subsystem](../../../docs/subsystems/tools.md) — standard execution and durable recording.
-- [Experimental verifier bundle](../../bundle/experimental-verifier/README.md) — opt-in profile layer.
+- [Experimental verifier bundle](../verifier-bundle/README.md) — opt-in profile layer.
 - [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-verifier) — exact model-facing schema.
 
 -----

@@ -5,8 +5,7 @@
   "references": [
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
-    { "path": "../../experimental/verifier" },
-    { "path": "../../experimental/tool-verifier" },
-    { "path": "../../runtime-diagnostics/invariants" }
+    { "path": "../verifier" },
+    { "path": "../tool-verifier" }
   ]
 }

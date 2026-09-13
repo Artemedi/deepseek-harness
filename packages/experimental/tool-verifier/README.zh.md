@@ -59,7 +59,7 @@ kind: "package-reference"
 | 文件 | 作用 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Tool schema、verifier call 与紧凑 JSON result |
-| [`src/invariant.ts`](src/invariant.ts) | 已注册 tool 的 composition invariant |
+| — | 不发布 runtime invariant companion；verifier 返回单个不可变结果，标准 tool runtime 负责持久 call/result 配对。 |
 
 </details>
 
@@ -70,7 +70,7 @@ kind: "package-reference"
 
 - [Verifier service](../verifier/README.zh.md) — provider、credential、bound 与 validation。
 - [Tool subsystem](../../../docs/subsystems/tools.zh.md) — 标准 execution 与 durable recording。
-- [Experimental verifier bundle](../../bundle/experimental-verifier/README.zh.md) — 选择加入的 profile layer。
+- [Experimental verifier bundle](../verifier-bundle/README.zh.md) — 选择加入的 profile layer。
 - [Generated tool catalog](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-verifier) — 精确 model-facing schema。
 
 -----
