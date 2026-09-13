@@ -357,6 +357,27 @@ describe('CI workflow', () => {
     expect(evaluate(selectors.linux, {}, 'maintainer', 'Artemedi/deepseek-harness')).toBe('ubuntu-24.04')
     expect(evaluate(selectors.windows, {}, 'maintainer', 'Artemedi/deepseek-harness')).toBe('windows-2025')
 
+    if (!isRecord(node24.env) || !isRecord(node24Coverage.env) || !isRecord(node24Consumers.env)) {
+      throw new TypeError('Linux PR jobs must define environment budgets')
+    }
+    for (const [jobName, job, key, forkValue, upstreamValue] of [
+      ['node-24', node24, 'DSH_GATE_CONCURRENCY', '4', '8'],
+      ['node-24-coverage', node24Coverage, 'DSH_COVERAGE_MAX_WORKERS', '3', '6'],
+      ['node-24-coverage', node24Coverage, 'DSH_COVERAGE_PARTITIONS', '2', '4'],
+      ['node-24-coverage', node24Coverage, 'DSH_GATE_CONCURRENCY', '2', '3'],
+      ['node-24-consumers', node24Consumers, 'DSH_GATE_CONCURRENCY', '2', '10'],
+      ['node-24-consumers', node24Consumers, 'DSH_OXLINT_THREADS', '2', '8'],
+      ['node-24-consumers', node24Consumers, 'DSH_PUBLINT_CONCURRENCY', '2', '8'],
+      ['node-24-consumers', node24Consumers, 'DSH_WEB_SNAPSHOT_WORKERS', '2', '6'],
+      ['node-24-consumers', node24Consumers, 'DSH_SNAPSHOT_MAX_CONCURRENCY', '4', '32'],
+    ] as const) {
+      if (!isRecord(job.env) || typeof job.env[key] !== 'string') {
+        throw new TypeError(`${jobName}.${key} must be an expression`)
+      }
+      expect(evaluate(job.env[key], {}, 'maintainer', 'Artemedi/deepseek-harness'), `${jobName}.${key} fork budget`).toBe(forkValue)
+      expect(evaluate(job.env[key], {}), `${jobName}.${key} upstream budget`).toBe(upstreamValue)
+    }
+
     // The run-gates aggregate lanes stop at the first blocking gate failure so
     // a red aggregate does not keep burning runner time on the remaining
     // gates. Removing the flag silently reverts to running every independent

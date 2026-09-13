@@ -52,7 +52,9 @@ jobs:
           || 'dsh-ubuntu-24-04-16core' }}
     name: node 24 / static
     env:
-      DSH_GATE_CONCURRENCY: '8'
+      # Independent repositories fall back from the upstream 16-core pool to
+      # standard hosted runners, so bound their aggregate to the available CPU.
+      DSH_GATE_CONCURRENCY: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '4' || '8' }}
       # Stop the aggregate at the first blocking gate failure so a red run
       # does not keep burning enterprise runner time on the remaining gates.
       DSH_GATE_FAIL_FAST: '1'
@@ -122,9 +124,9 @@ jobs:
     env:
       # Partitioning replaces the instrumented share; this budget gives the
       # exempt-heavy gate two workers on both hosted and failover runners.
-      DSH_COVERAGE_MAX_WORKERS: '6'
-      DSH_COVERAGE_PARTITIONS: '4'
-      DSH_GATE_CONCURRENCY: '3'
+      DSH_COVERAGE_MAX_WORKERS: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '3' || '6' }}
+      DSH_COVERAGE_PARTITIONS: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '2' || '4' }}
+      DSH_GATE_CONCURRENCY: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '2' || '3' }}
       # Managed-scope teardown cases run past the default per-test budget when
       # this lane's partitions, workers, and sibling gates share one host: the
       # disposal cases in subprocess-local and bash-sandbox exceeded 5000ms on
@@ -251,17 +253,18 @@ jobs:
           || 'dsh-ubuntu-24-04-16core' }}
     name: node 24 / snapshots and artifacts
     env:
-      DSH_GATE_CONCURRENCY: '10'
+      DSH_GATE_CONCURRENCY: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '2' || '10' }}
       DSH_NODE_COMPAT_SKIP_TYPECHECK: '1'
-      DSH_OXLINT_THREADS: '8'
-      DSH_PUBLINT_CONCURRENCY: '8'
-      DSH_WEB_SNAPSHOT_WORKERS: '6'
+      DSH_OXLINT_THREADS: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '2' || '8' }}
+      DSH_PUBLINT_CONCURRENCY: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '2' || '8' }}
+      DSH_WEB_SNAPSHOT_WORKERS: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '2' || '6' }}
       # A failing gate aborts its running siblings: a failing build stops the
       # independent Node compatibility smoke, and a failing reader (e.g.
       # publint) stops the remaining artifact consumers.
       DSH_GATE_FAIL_FAST: '1'
-      # Failover halves snapshot concurrency for the shared 64-core VM.
-      DSH_SNAPSHOT_MAX_CONCURRENCY: ${{ vars.DSH_CI_FAILOVER_LINUX == 'selfhosted' && github.event.pull_request.user.login != 'dependabot[bot]' && '12' || '32' }}
+      # Failover halves snapshot concurrency for the shared 64-core VM;
+      # independently hosted repositories use the standard four-core budget.
+      DSH_SNAPSHOT_MAX_CONCURRENCY: ${{ github.repository != 'deepseek-harness/deepseek-harness' && '4' || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted' && github.event.pull_request.user.login != 'dependabot[bot]' && '12' || '32' }}
     steps:
       # Runner cleanup owns tool caches and fixtures, including cancelled runs.
       - name: Use runner-owned temporary storage
