@@ -1,0 +1,6 @@
+#!/bin/sh
+# Global `dsh` launcher pointing at the local repository build.
+# Installed to PNPM_HOME/bin (usually ~/.local/share/pnpm/bin).
+# Rebuild with `pnpm run build` after updating the repository.
+NODE_BIN=$(command -v node 2>/dev/null || echo /home/linuxbrew/.linuxbrew/bin/node)
+exec "$NODE_BIN" /var/home/Trintos/projects/deepseek-harness/apps/cli/lib/bin.js "$@"

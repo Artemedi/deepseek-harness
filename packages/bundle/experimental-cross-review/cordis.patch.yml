@@ -1,0 +1,10 @@
+- insert:
+    - id: experimental-cross-review
+      name: '@deepseek-ai/dsh-experimental-cross-review'
+      config:
+        reviewerSubagentProvider: spawn
+        reviewerProvider: '<independent-provider-route>'
+        reviewerModel: '<independent-reviewer-model>'
+        rules: {}
+        reviewerAllowedTools: []
+        failClosedOnUnavailable: true
